@@ -1,9 +1,0 @@
-- Print graphs for thesis.
-- Document notebooks correctly and deeply.
-- Results summary.
-- Model results reasoning.
-    - Plots from Mario's notebook.
-
-- Clustering (non-supervised).
-- Neural network.
-- Data visualization.
