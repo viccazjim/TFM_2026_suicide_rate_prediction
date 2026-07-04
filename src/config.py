@@ -1,7 +1,6 @@
 """
 Shared constants. Centralized here so every notebook/module references the
-same lists instead of redefining them (they were previously duplicated
-across cells in the original notebook).
+same lists instead of redefining them.
 """
 
 # EU countries list since they are the ones of interest in this analysis

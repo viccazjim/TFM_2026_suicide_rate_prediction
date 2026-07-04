@@ -1,18 +1,10 @@
 """
 Data loading and cleaning: IHME (local CSV), World Bank (API), WHO (API).
 
-Origin (EDA_models_VC.ipynb):
-- country_code            <- cell 4
-- load_ihme_data          <- cell 5
-- fetch_worldbank_indicators <- cell 7
-- fetch_who_suicide_rates <- cell 9 (WHO part only)
-- build_master_dataset    <- cell 9 (merge + development/real_world split)
-- impute_missing_values   <- cell 14
-
-No modelling decisions live here — this module only produces
-df_development / df_real_world exactly as the original notebook did.
+No modelling decisions set here — this module produces df_development / df_real_world.
 """
 
+import numpy as np
 import pandas as pd
 import pycountry
 import requests
@@ -46,7 +38,22 @@ def load_ihme_data(csv_path: str, min_year: int = 2000) -> pd.DataFrame:
     """
     Loads the IHME mental-health-prevalence base dataset (local CSV,
     already filtered to EU countries at extraction time), pivots it wide
-    (one column per cause_name), and drops the aggregate 'All causes' row.
+    (one column per cause_name), and drops the 'All causes' row.
+
+    Parameters
+    ----------
+    csv_path : str
+        Path to the IHME export CSV.
+    min_year : int, default 2000
+        Rows with "year" below this value are dropped.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: "Country", "Code", "Year", plus one column per distinct
+        cause_name in the source file (e.g. "Depressive disorders",
+        "Anxiety disorders", ...), each holding the "val" for that cause.
+        "Code" is derived by looking up "location_name" via country_code().
     """
     base_data = pd.read_csv(csv_path)
     base_data["Code"] = base_data["location_name"].apply(country_code)
@@ -75,7 +82,39 @@ def fetch_worldbank_indicators(
 ) -> pd.DataFrame:
     """
     Merges World Bank API indicators onto df_base, one indicator at a time
-    (World Bank API does not support multi-indicator requests).
+    (the World Bank API does not support multi-indicator requests).
+
+    Failure handling: if a single indicator's request fails (non-200
+    status) or returns no data, that indicator is skipped with a printed
+    warning — the function does not raise, and continues merging the
+    remaining indicators. This means the returned DataFrame can silently
+    be missing a column if that indicator's API call failed; check the
+    printed output or the resulting columns if you need to be sure all
+    indicators came through.
+
+    Parameters
+    ----------
+    df_base : pd.DataFrame
+        Dataset to merge onto.
+        Must contain "Code" and "Year".
+    eu_countries_iso : list[str]
+        ISO alpha-3 codes to keep from each indicator's response — the
+        World Bank API returns all countries/aggregates, this filters to
+        the EU set before merging.
+    indicators : dict[str, str]
+        Mapping of {World Bank indicator code: output column name}, e.g.
+        {"NY.GDP.PCAP.CD": "GDP per capita"}.
+    region : str, default "ALL"
+        World Bank API region/country filter in the URL path.
+    date_range : str, default "2000:2026"
+        World Bank API date range filter, "start:end" format.
+
+    Returns
+    -------
+    pd.DataFrame
+        df_base with one additional column per successfully-fetched
+        indicator, left-joined on ["Code", "Year"]. Features rate units
+        adapted to the ones used elsewhere (indicator per 100,000 inhabitants - WHO/IHME).
     """
     df_features = df_base.copy()
 
@@ -130,6 +169,26 @@ def fetch_who_suicide_rates(indicator: str = "SDGSUICIDE") -> pd.DataFrame:
     """
     Fetches suicide mortality rate (both sexes, all age groups) from the
     WHO Global Health Observatory API.
+
+    Raises on failure rather than skipping silently since it is the target variable.
+
+    Parameters
+    ----------
+    indicator : str, default "SDGSUICIDE"
+        WHO GHO OData indicator code.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns "Code", "Year", "Suicide rate", filtered to Dim1 ==
+        "SEX_BTSX" (both sexes) and Dim2 == "AGEGROUP_YEARSALL" (all age
+        groups), sorted by ["Code", "Year"].
+
+    Raises
+    ------
+    RuntimeError
+        If the HTTP request does not return status 200, or if it returns
+        200 but with an empty "value" list.
     """
     url = f"https://ghoapi.azureedge.net/api/{indicator}"
     print("Downloading suicide rate dataset from the WHO API.")
@@ -159,12 +218,32 @@ def build_master_dataset(
     df_features: pd.DataFrame, df_who: pd.DataFrame, development_cutoff_year: int = 2021
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Merges WHO suicide rates onto the feature set and splits into:
-    - df_development: years <= development_cutoff_year, has suicide rate labels,
-      used for modelling.
-    - df_real_world: years > development_cutoff_year, kept for reference only —
-      WHO has no suicide rate data for these years, so it is unlabeled and
-      not used in modelling.
+    Merges WHO suicide rates onto the feature set and splits the result
+    into a labeled modelling set and an unlabeled reference set by year.
+
+    Parameters
+    ----------
+    df_features : pd.DataFrame
+        Output of fetch_worldbank_indicators() (or equivalent), must
+        contain "Country", "Code", "Year".
+    df_who : pd.DataFrame
+        Output of fetch_who_suicide_rates(), must contain "Code", "Year",
+        "Suicide rate".
+    development_cutoff_year : int, default 2021
+        Last year considered "labeled". Chosen because WHO suicide rate
+        data is not yet available after this year at the time of writing.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        (df_development, df_real_world):
+        - df_development: rows with Year <= development_cutoff_year, has
+          "Suicide rate" populated, used for modelling.
+        - df_real_world: rows with Year > development_cutoff_year, kept
+          for reference only — "Suicide rate" will be NaN for these rows
+          since WHO has no data yet, so this set is not usable for
+          training or evaluation as-is.
+        Both are sorted by ["Country", "Year"].
     """
     df_complete = pd.merge(
         df_features,
@@ -179,15 +258,54 @@ def build_master_dataset(
     return df_development, df_real_world
 
 
-def impute_missing_values(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+def interpolate_with_trend_extrapolation(
+    df: pd.DataFrame, columns: list[str]
+) -> pd.DataFrame:
     """
-    Linear interpolation within each country for the given columns. Chosen
-    (over other imputation strategies) because the missing values occur in
-    consecutive year runs within a country's series.
+    Interior gaps: standard linear interpolation (unchanged).
+    Boundary gaps: linear extrapolation using an OLS fit on the country's
+    own available years, instead of flat-filling with the nearest known
+    value. Requires at least 2 known points per country to fit a trend;
+    falls back to flat-fill if a country has only 1 known point (a trend
+    can't be estimated from a single point).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset containing "Country" and the columns to impute.
+    columns : list[str]
+        Column names to interpolate. Columns not in this list are
+        returned unchanged.
+
+    Returns
+    -------
+    pd.DataFrame
+        A new DataFrame with the given columns interpolated per country.
     """
     out = df.copy()
     for col in columns:
-        out[col] = out.groupby("Country")[col].transform(
-            lambda x: x.interpolate(method="linear", limit_direction="both")
-        )
+
+        def _fill_group(group):
+            s = group[col]
+            s_interp = s.interpolate(
+                method="linear", limit_direction=None
+            )  # interior only
+            if s_interp.isna().sum() == 0:
+                return s_interp
+            known = s_interp.dropna()
+            if len(known) < 2:
+                return s_interp.interpolate(
+                    method="linear", limit_direction="both"
+                )  # fallback: flat-fill
+            coeffs = np.polyfit(
+                known.index_year if False else group.loc[known.index, "Year"],
+                known.values,
+                deg=1,
+            )
+            trend = np.poly1d(coeffs)
+            missing_idx = s_interp[s_interp.isna()].index
+            s_interp.loc[missing_idx] = trend(group.loc[missing_idx, "Year"])
+            return s_interp
+
+        out[col] = out.groupby("Country", group_keys=False).apply(_fill_group)
     return out

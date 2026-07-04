@@ -9,10 +9,30 @@ import pandas as pd
 
 def geographical_split(
     df: pd.DataFrame, eu_countries_iso: list[str], random_state: int = 42
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str], list[str], list[str]]:
     """
-    Geographical split: countries are divided 70/15/15 into train/test/val.
-    Tests whether the model generalizes to *unseen countries*.
+    Splits the dataset by country: 70% of countries go to train, 15% to
+    test, 15% to validation. Every row for a given country goes to the
+    same split.
+
+    Used to test whether the model generalizes to countries it has
+    never seen.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset to split, must contain "Code" (ISO alpha-3).
+    eu_countries_iso : list[str]
+        Full list of country codes to split.
+    random_state : int, default 42
+        Seed for the shuffle, for reproducibility.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str], list[str], list[str]]
+        (df_train, df_test, df_val, train_countries, test_countries, val_countries):
+        the three DataFrame splits, followed by the list of country codes
+        assigned to each.
     """
     rng = np.random.RandomState(random_state)
     countries = eu_countries_iso.copy()
@@ -29,20 +49,34 @@ def geographical_split(
     df_train = df[df["Code"].isin(train_countries)].copy()
     df_test = df[df["Code"].isin(test_countries)].copy()
     df_val = df[df["Code"].isin(val_countries)].copy()
-    return df_train, df_test, df_val
+    return df_train, df_test, df_val, train_countries, test_countries, val_countries
 
 
 def temporal_split(
     df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[int], list[int], list[int]]:
     """
-    Temporal split: years divided 70/15/15 into train/test/val (in
-    chronological order, no shuffling). Tests whether the model generalizes
-    to *future years*.
+    Splits the dataset by year, in chronological order (no shuffling):
+    the earliest 70% of distinct years go to train, the next 15% to test,
+    the final 15% to validation. All countries appear in every split.
 
-    Returns the three DataFrames plus the year lists actually used, so
-    downstream notebooks can print/log them instead of assuming fixed
-    year ranges.
+    Used to test whether the model generalizes to future years.
+
+    The exact year boundaries are not hardcoded, and the function returns the
+    actual year lists used so callers can log/display them rather than
+    assuming a fixed range (e.g. do not assume test is always "2016-2018").
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset to split, must contain "Year".
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[int], list[int], list[int]]
+        (df_train, df_test, df_val, train_years, test_years, val_years):
+        the three DataFrame splits, followed by the sorted list of years
+        assigned to each.
     """
     year_range = sorted(df["Year"].unique())
     total_years = len(year_range)

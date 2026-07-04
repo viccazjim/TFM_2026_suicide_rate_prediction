@@ -1,13 +1,6 @@
 """
 Model registry, hyperparameter grids, and train/evaluate functions.
 
-Origin (EDA_models_VC.ipynb):
-- param_grids / models      <- cell 48
-- param_grids_boost / models_boost <- added later in the thesis conversation
-  (XGBoost/CatBoost), grids kept conservative on purpose: this dataset has
-  a small sample size after the train/test/val split (27 EU countries x
-  ~20 years), so deep trees overfit easily.
-- train_model / evaluate_model <- cell 49
 """
 
 import time
@@ -40,24 +33,6 @@ param_grids = {
         "min_samples_split": [2, 5, 10],
         "max_features": ["sqrt", 0.5],
     },
-}
-
-
-def make_baseline_models(random_state: int = 42) -> dict:
-    """Fresh (unfitted) instances — call this each time you start a new
-    GridSearchCV run, never reuse a fitted estimator across configs."""
-    return {
-        "Ridge": Ridge(),
-        "Lasso": Lasso(max_iter=10000),
-        "SVR": SVR(),
-        "Random Forest": RandomForestRegressor(random_state=random_state, n_jobs=-1),
-    }
-
-
-# --------------------------------------------------------------------------
-# Boosted models
-# --------------------------------------------------------------------------
-param_grids_boost = {
     "XGBoost": {
         "n_estimators": [100, 200],
         "max_depth": [2, 3, 4],
@@ -74,8 +49,29 @@ param_grids_boost = {
 }
 
 
-def make_boosted_models(random_state: int = 42) -> dict:
+def make_models(random_state: int = 42) -> dict:
+    """
+    Builds fresh, unfitted instances of all models.
+
+    Created because GridSearchCV mutates the estimator it is given,
+    so a new instance for each run needs to be created.
+
+    Parameters
+    ----------
+    random_state : int, default 42
+        Passed to Random Forest for reproducibility. Ridge/Lasso/SVR have
+        no stochastic component here and ignore this.
+
+    Returns
+    -------
+    dict[str, sklearn estimator]
+        {"Ridge": Ridge(), "Lasso": Lasso(...), ...}, unfitted.
+    """
     return {
+        "Ridge": Ridge(),
+        "Lasso": Lasso(max_iter=10000),
+        "SVR": SVR(),
+        "Random Forest": RandomForestRegressor(random_state=random_state, n_jobs=-1),
         "XGBoost": XGBRegressor(
             random_state=random_state, n_jobs=-1, objective="reg:squarederror"
         ),
@@ -88,13 +84,41 @@ def make_boosted_models(random_state: int = 42) -> dict:
 # --------------------------------------------------------------------------
 def train_model(name, model, param_grid, X_train, y_train, cv):
     """
-    Runs GridSearchCV for a single model and returns the best estimator
-    along with training metadata. Evaluation is handled separately by
-    evaluate_model(), keeping the two concerns cleanly separated.
+    Runs GridSearchCV for a single model, refits on the full training set
+    with the best found parameters, and returns the fitted estimator plus
+    training metadata.
 
-    cv: int for standard k-fold (Option A, countries are independent
-        observations), or a TimeSeriesSplit object (Option B, years are
-        ordered and must not be shuffled).
+    Parameters
+    ----------
+    name : str
+        Display name for the model (used in print statements and as the
+        key when storing results elsewhere, e.g. build_results_table()).
+    model : sklearn-compatible estimator
+        Unfitted estimator.
+    param_grid : dict
+        Hyperparameter grid for GridSearchCV, e.g. param_grids["Ridge"].
+    X_train : pd.DataFrame
+        Scaled training features.
+    y_train : pd.Series
+        Training target.
+    cv : int or sklearn cross-validator
+        Pass an int for standard k-fold (geographical_split — countries
+        are independent observations, order does not matter). Pass a
+        TimeSeriesSplit instance for temporal_split — years are ordered
+        and must not be shuffled, or the model would train on future data
+        to predict the past within a fold.
+
+    Returns
+    -------
+    dict
+        {
+          "name": str,
+          "best_estimator": fitted sklearn estimator (refit on full X_train/y_train
+                             with the best params found),
+          "best_params": dict,
+          "cv_rmse": float (mean RMSE across CV folds, at the best params),
+          "time_s": float (wall-clock seconds for the GridSearchCV.fit call),
+        }
     """
     print(f"\n{'=' * 60}")
     print(f"  Training: {name}")
@@ -132,7 +156,35 @@ def train_model(name, model, param_grid, X_train, y_train, cv):
 
 
 def evaluate_model(trained, X, y, split_label):
-    """Evaluates a trained model on a given split and returns a metrics dict."""
+    """
+    Evaluates a trained model (from train_model()) on a given data split
+    and returns its metrics plus the raw predictions/actuals.
+
+    Parameters
+    ----------
+    trained : dict
+        Output of train_model() — must contain "best_estimator" and "name".
+    X : pd.DataFrame
+        Scaled features for the split being evaluated (e.g. test or val).
+    y : pd.Series
+        True target values for that split.
+    split_label : str
+        Label identifying the split (e.g. "Test", "Val") — stored in the
+        output and printed, used downstream to filter results
+        (e.g. build_results_table(..., split_filter="Test", ...)).
+
+    Returns
+    -------
+    dict
+        {
+          "model": str, "split": str,
+          "rmse": float, "mae": float, "r2": float,
+          "predictions": np.ndarray, "actuals": np.ndarray,
+        }
+        predictions/actuals are included so downstream diagnostics (e.g.
+        plot_residuals_by_year) can recompute residuals without
+        re-predicting.
+    """
     model = trained["best_estimator"]
     name = trained["name"]
     y_pred = model.predict(X)

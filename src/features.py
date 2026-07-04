@@ -1,15 +1,9 @@
 """
 Feature engineering utilities.
 
-Origin (EDA_models_VC.ipynb):
-- compute_vif           <- cell 26
-- build_predictor_list  <- logic reused from cells 22 / 28 / 63
-- add_lag_features      <- cell 61 (cleaned: NO deltas, see conversation history —
-                           suicide_rate_delta was dropped because it leaked the
-                           current-year target: delta = y(t) - y(t-1), and
-                           lag1 + delta = y(t) exactly)
 """
 
+import numpy as np
 import pandas as pd
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools import add_constant
@@ -17,17 +11,37 @@ from statsmodels.tools import add_constant
 
 def compute_vif(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
     """
-    Computes the Variance Inflation Factor (VIF) for each predictor.
+    Computes the Variance Inflation Factor (VIF) for each predictor in
+    feature_cols, using all other columns in feature_cols as regressors.
     VIF > 5: moderate concern; VIF > 10: high concern.
+
+    Rows with any NaN in feature_cols are dropped before fitting —
+    this means the row count used
+    here may be lower than len(df) if any predictor has missing values.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset containing the columns listed in feature_cols.
+    feature_cols : list[str]
+        Predictor columns to check for multicollinearity against each
+        other. Should not include the target or ID columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns "Feature" and "VIF", one row per feature_cols entry,
+        sorted by VIF descending.
     """
     X = df[feature_cols].dropna()
     X_const = add_constant(X)
+    X_const_array = np.asarray(X_const)
     vif_data = (
         pd.DataFrame(
             {
                 "Feature": X.columns,
                 "VIF": [
-                    variance_inflation_factor(X_const.values, i + 1)
+                    variance_inflation_factor(X_const_array, i + 1)
                     for i in range(len(X.columns))
                 ],
             }
@@ -38,42 +52,74 @@ def compute_vif(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
     return vif_data
 
 
-def build_predictor_list(df: pd.DataFrame, id_cols: list[str], target: str) -> list[str]:
-    """Every column that is not an ID column and not the target."""
-    return [c for c in df.columns if c not in id_cols + [target]]
-
-
-def add_lag_features(
-    df: pd.DataFrame,
-    target: str,
-    predictor_features: list[str],
-    lag_all_predictors: bool = True,
-) -> pd.DataFrame:
+def build_predictor_list(
+    df: pd.DataFrame, id_cols: list[str], target: str
+) -> list[str]:
     """
-    Adds t-1 lag features, sorted by Country/Year. No delta features are
-    created — see module docstring for why.
+    Returns every column in df that is neither an ID column nor the target.
 
     Parameters
     ----------
-    lag_all_predictors : if True, also lags every column in predictor_features
-        (needed for the ablation study in notebook 04). If False, only the
-        target lag is added.
+    df : pd.DataFrame
+        Dataset to inspect.
+    id_cols : list[str]
+        Columns that have no predictive value (e.g. ["Country", "Code", "Year", "Region"]).
+    target : str
+        Name of the target column ("Suicide rate") — excluded to
+        avoid leaking it into its own feature set.
 
-    Returns a new DataFrame with rows containing NaN lags (first year per
-    country) already dropped.
+    Returns
+    -------
+    list[str]
+        Column names in df, in their original order, excluding id_cols
+        and target.
     """
-    out = df.copy().sort_values(["Country", "Year"]).reset_index(drop=True)
+    return [c for c in df.columns if c not in id_cols + [target]]
 
-    out[f"{target.lower().replace(' ', '_')}_lag1"] = (
-        out.groupby("Country")[target].shift(1)
-    )
-    lag_cols = [f"{target.lower().replace(' ', '_')}_lag1"]
 
-    if lag_all_predictors:
-        for col in predictor_features:
-            lag_col = f"{col}_lag1"
-            out[lag_col] = out.groupby("Country")[col].shift(1)
-            lag_cols.append(lag_col)
+def flag_outliers_iqr(
+    df: pd.DataFrame, columns: list[str], threshold: float = 1.5
+) -> pd.DataFrame:
+    """
+    Flags rows as outliers using the IQR method for each of the given
+    columns, independently per column (a row can be an outlier on one
+    column and not another — returns per-feature counts).
 
-    out = out.dropna(subset=lag_cols).reset_index(drop=True)
-    return out
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset to check.
+    columns : list[str]
+        Columns to test for outliers.
+    threshold : float, default 1.5
+        IQR multiplier defining the outlier bounds
+        (lower = Q1 - threshold*IQR, upper = Q3 + threshold*IQR).
+        1.5 = standard convention, 3.0 = extreme values only.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per column in `columns` (that exists in df), with:
+        "Feature", "Outlier count", "Outlier %", "Lower bound", "Upper bound".
+        Sorted by "Outlier count" descending.
+    """
+    results = []
+    for col in columns:
+        if col not in df.columns:
+            continue
+        q1 = df[col].quantile(0.25)
+        q3 = df[col].quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - threshold * iqr
+        upper = q3 + threshold * iqr
+        mask = (df[col] < lower) | (df[col] > upper)
+        results.append(
+            {
+                "Feature": col,
+                "Outlier count": mask.sum(),
+                "Outlier %": round(mask.sum() / len(df) * 100, 2),
+                "Lower bound": round(lower, 2),
+                "Upper bound": round(upper, 2),
+            }
+        )
+    return pd.DataFrame(results).sort_values("Outlier count", ascending=False)
