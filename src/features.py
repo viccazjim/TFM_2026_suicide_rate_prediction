@@ -53,10 +53,11 @@ def compute_vif(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
 
 
 def build_predictor_list(
-    df: pd.DataFrame, id_cols: list[str], target: str
+    df: pd.DataFrame, id_cols: list[str], target: str, extra_exclude: list[str] = None
 ) -> list[str]:
     """
-    Returns every column in df that is neither an ID column nor the target.
+    Returns every column in df that is neither an ID column, the target,
+    nor in extra_exclude.
 
     Parameters
     ----------
@@ -67,14 +68,19 @@ def build_predictor_list(
     target : str
         Name of the target column ("Suicide rate") — excluded to
         avoid leaking it into its own feature set.
+    extra_exclude : list[str], optional
+        Additional columns to drop, e.g. low-importance features
+        identified from a SHAP/feature-importance ranking that you want
+        to test removing without hardcoding the change into id_cols.
 
     Returns
     -------
     list[str]
-        Column names in df, in their original order, excluding id_cols
-        and target.
+        Column names in df, in their original order, excluding id_cols,
+        target, and extra_exclude.
     """
-    return [c for c in df.columns if c not in id_cols + [target]]
+    exclude = set(id_cols) | {target} | set(extra_exclude or [])
+    return [c for c in df.columns if c not in exclude]
 
 
 def flag_outliers_iqr(

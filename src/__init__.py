@@ -31,6 +31,7 @@ from src.models import (
 from src.metrics import (
     build_results_table,
     get_eval_entry,
+    metrics_by_period,
 )
 from src.diagnostics import (
     suicide_evolution_graph,

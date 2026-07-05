@@ -90,3 +90,49 @@ def get_eval_entry(eval_list, model_name, split_filter):
         f"No entry found for model={model_name!r}, split={split_filter!r}. "
         f"Available: {[(r['model'], r['split']) for r in eval_list]}"
     )
+
+
+def metrics_by_period(actual, predicted, years, periods: dict):
+    """
+    Computes RMSE/MAE/R² separately for named year sub-periods within one
+    evaluation split — e.g. splitting Option B's Validation years into
+    "Pre-COVID" (2018-2019) and "COVID" (2020-2021) to check whether
+    degradation is concentrated in a specific period rather than being
+    generic time-distance decay.
+
+    Parameters
+    ----------
+    actual : array-like
+    predicted : array-like
+    years : array-like
+        Must align positionally with actual/predicted (same row order,
+        same length) — e.g. df_val_B["Year"].reset_index(drop=True).
+    periods : dict[str, list[int]]
+        E.g. {"Pre-COVID": [2018, 2019], "COVID": [2020, 2021]}. Rows
+        whose year is not in any period's list are ignored.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: "Period", "N", "RMSE", "MAE", "R²". One row per key in
+        `periods`, in the order given. Periods with fewer than 2 rows
+        get NaN for R² (undefined with < 2 points).
+    """
+    actual = np.asarray(actual)
+    predicted = np.asarray(predicted)
+    years = pd.Series(years).reset_index(drop=True).to_numpy()
+
+    rows = []
+    for label, year_list in periods.items():
+        mask = np.isin(years, year_list)
+        n = int(mask.sum())
+        if n == 0:
+            rows.append({"Period": label, "N": 0, "RMSE": np.nan, "MAE": np.nan, "R²": np.nan})
+            continue
+        a, p = actual[mask], predicted[mask]
+        rmse = float(np.sqrt(mean_squared_error(a, p)))
+        mae = float(mean_absolute_error(a, p))
+        r2 = float(r2_score(a, p)) if n >= 2 else np.nan
+        rows.append({"Period": label, "N": n, "RMSE": round(rmse, 4), "MAE": round(mae, 4),
+                     "R²": round(r2, 4) if not np.isnan(r2) else np.nan})
+    return pd.DataFrame(rows)
