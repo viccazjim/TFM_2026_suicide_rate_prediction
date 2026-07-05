@@ -127,12 +127,21 @@ def metrics_by_period(actual, predicted, years, periods: dict):
         mask = np.isin(years, year_list)
         n = int(mask.sum())
         if n == 0:
-            rows.append({"Period": label, "N": 0, "RMSE": np.nan, "MAE": np.nan, "R²": np.nan})
+            rows.append(
+                {"Period": label, "N": 0, "RMSE": np.nan, "MAE": np.nan, "R²": np.nan}
+            )
             continue
         a, p = actual[mask], predicted[mask]
         rmse = float(np.sqrt(mean_squared_error(a, p)))
         mae = float(mean_absolute_error(a, p))
         r2 = float(r2_score(a, p)) if n >= 2 else np.nan
-        rows.append({"Period": label, "N": n, "RMSE": round(rmse, 4), "MAE": round(mae, 4),
-                     "R²": round(r2, 4) if not np.isnan(r2) else np.nan})
+        rows.append(
+            {
+                "Period": label,
+                "N": n,
+                "RMSE": round(rmse, 4),
+                "MAE": round(mae, 4),
+                "R²": round(r2, 4) if not np.isnan(r2) else np.nan,
+            }
+        )
     return pd.DataFrame(rows)

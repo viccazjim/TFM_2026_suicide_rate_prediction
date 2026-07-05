@@ -57,3 +57,8 @@ from src.explainability import (
     plot_shap_summary,
     plot_shap_waterfall,
 )
+
+from src.persistence import (
+    save_artifact,
+    load_artifact,
+)

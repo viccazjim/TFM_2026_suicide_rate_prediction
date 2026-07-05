@@ -1,0 +1,69 @@
+"""
+Orchestrator: runs the full pipeline in order —
+Ingestion/Cleaning (01) -> EDA (02) -> Training/Evaluation (03).
+
+Each stage runs as an independent process (not an import), on purpose:
+that way a failure in one stage doesn't leave the interpreter in a
+half-built state for the next one, and each stage's log stays separate
+with its own exit code.
+
+Usage:
+    python prod/run_pipeline.py            # all three stages
+    python prod/run_pipeline.py --skip-01  # reuse existing data/processed/
+    python prod/run_pipeline.py --only 03  # training only (requires 01+02 already run)
+"""
+
+import argparse
+import logging
+import subprocess
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+PROD_DIR = REPO_ROOT / "prod"
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logger = logging.getLogger(__name__)
+
+STAGES = {
+    "01": PROD_DIR / "01_data_pipeline.py",
+    "02": PROD_DIR / "02_eda.py",
+    "03": PROD_DIR / "03_train.py",
+}
+
+
+def run_stage(stage_key: str):
+    script_path = STAGES[stage_key]
+    logger.info("=" * 60)
+    logger.info("Stage %s — %s", stage_key, script_path.name)
+    logger.info("=" * 60)
+    result = subprocess.run([sys.executable, str(script_path)], cwd=str(REPO_ROOT))
+    if result.returncode != 0:
+        logger.error("Stage %s failed (exit code %d) — stopping the pipeline.", stage_key, result.returncode)
+        sys.exit(result.returncode)
+    logger.info("Stage %s completed successfully.\n", stage_key)
+
+
+def run(stage_keys):
+    for key in stage_keys:
+        run_stage(key)
+    logger.info("Pipeline complete. Production model available in outputs/models/.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--skip-01", action="store_true", help="Skip stage 01 (ingestion/cleaning)")
+    parser.add_argument("--skip-02", action="store_true", help="Skip stage 02 (EDA)")
+    parser.add_argument("--only", choices=["01", "02", "03"], help="Run only one specific stage")
+    args = parser.parse_args()
+
+    if args.only:
+        run([args.only])
+    else:
+        keys = []
+        if not args.skip_01:
+            keys.append("01")
+        if not args.skip_02:
+            keys.append("02")
+        keys.append("03")
+        run(keys)
