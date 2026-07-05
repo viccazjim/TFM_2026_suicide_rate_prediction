@@ -30,6 +30,7 @@ from src.models import (
 )
 from src.metrics import (
     build_results_table,
+    get_eval_entry,
 )
 from src.diagnostics import (
     suicide_evolution_graph,
@@ -41,4 +42,16 @@ from src.diagnostics import (
     plot_suicide_dispersion_stripplot,
     plot_rmse_comparison,
     plot_r2_comparison,
+    plot_actual_vs_predicted,
+    plot_residual_histogram,
+    plot_residuals_vs_predicted,
+    plot_error_by_year,
+    mean_absolute_error_by_country,
+)
+
+from src.explainability import (
+    make_shap_explainer,
+    compute_shap_values,
+    plot_shap_summary,
+    plot_shap_waterfall,
 )

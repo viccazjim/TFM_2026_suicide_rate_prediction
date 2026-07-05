@@ -54,3 +54,39 @@ def build_results_table(eval_list, trained_dict, split_filter, approach_label):
     df = pd.DataFrame(rows).sort_values("RMSE").reset_index(drop=True)
     print(f"\n{approach_label} — {split_filter} set results:")
     return df
+
+
+def get_eval_entry(eval_list, model_name, split_filter):
+    """
+    Retrieves a single evaluate_model() output from an eval_list, by
+    model name and split — used to pull the exact predictions/actuals
+    needed for result diagnostics and SHAP (e.g. "give me CatBoost's
+    Validation predictions") without re-running evaluate_model().
+
+    Parameters
+    ----------
+    eval_list : list[dict]
+        Concatenated outputs of evaluate_model() calls (e.g. eval_A, eval_B).
+    model_name : str
+        E.g. "CatBoost" — must match the "model" key set by evaluate_model().
+    split_filter : str
+        E.g. "Test" or "Val".
+
+    Returns
+    -------
+    dict
+        The matching evaluate_model() output, containing at least
+        "model", "split", "rmse", "mae", "r2", "predictions", "actuals".
+
+    Raises
+    ------
+    ValueError
+        If no entry matches both model_name and split_filter.
+    """
+    for r in eval_list:
+        if r["model"] == model_name and r["split"] == split_filter:
+            return r
+    raise ValueError(
+        f"No entry found for model={model_name!r}, split={split_filter!r}. "
+        f"Available: {[(r['model'], r['split']) for r in eval_list]}"
+    )

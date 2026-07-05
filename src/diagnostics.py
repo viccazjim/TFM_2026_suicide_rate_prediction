@@ -442,3 +442,179 @@ def plot_r2_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, label:
     ax.grid(axis="y", linestyle="--", alpha=0.5)
     plt.tight_layout()
     return fig
+
+
+# --------------------------------------------------------------------------
+# Per-prediction result diagnostics (actual vs predicted, residuals, error breakdowns)
+# --------------------------------------------------------------------------
+def plot_actual_vs_predicted(actual, predicted, title="Actual vs Predicted"):
+    """
+    Scatter of predicted vs actual target values, with the y=x reference
+    line — points on the line are perfect predictions, points below/above
+    are under/over-estimates.
+
+    Parameters
+    ----------
+    actual : array-like
+        True target values (e.g. evaluate_model()[...]["actuals"]).
+    predicted : array-like
+        Model predictions (e.g. evaluate_model()[...]["predictions"]).
+    title : str, default "Actual vs Predicted"
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    actual = np.asarray(actual)
+    predicted = np.asarray(predicted)
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.scatter(actual, predicted, alpha=0.6, s=50, edgecolor="white", linewidth=0.3)
+
+    lims = [
+        min(actual.min(), predicted.min()),
+        max(actual.max(), predicted.max()),
+    ]
+    ax.plot(lims, lims, color="red", linestyle="--", linewidth=1.5, label="y = x")
+
+    ax.set_xlabel("Actual suicide rate")
+    ax.set_ylabel("Predicted suicide rate")
+    ax.set_title(title, fontweight="bold")
+    ax.legend()
+    plt.tight_layout()
+    return fig
+
+
+def plot_residual_histogram(actual, predicted, title="Residual Distribution"):
+    """
+    Histogram of residuals (actual - predicted). A distribution centered
+    on 0 with no strong skew indicates the model is not systematically
+    over- or under-predicting.
+
+    Parameters
+    ----------
+    actual : array-like
+    predicted : array-like
+    title : str, default "Residual Distribution"
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    residuals = np.asarray(actual) - np.asarray(predicted)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.hist(residuals, bins=20, edgecolor="black", alpha=0.8, color="#4C72B0")
+    ax.axvline(0, color="red", linestyle="--", linewidth=2)
+    ax.set_xlabel("Residual (Actual - Predicted)")
+    ax.set_ylabel("Frequency")
+    ax.set_title(title, fontweight="bold")
+    plt.tight_layout()
+    return fig
+
+
+def plot_residuals_vs_predicted(actual, predicted, title="Residuals vs Predicted"):
+    """
+    Scatter of residuals against predicted values. A random scatter around
+    0 with no visible funnel/trend supports the constant-variance
+    assumption; a funnel shape indicates heteroscedasticity (the model's
+    error grows or shrinks with the predicted value).
+
+    Parameters
+    ----------
+    actual : array-like
+    predicted : array-like
+    title : str, default "Residuals vs Predicted"
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    predicted = np.asarray(predicted)
+    residuals = np.asarray(actual) - predicted
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.scatter(predicted, residuals, alpha=0.6, s=50, edgecolor="white", linewidth=0.3)
+    ax.axhline(0, color="red", linestyle="--", linewidth=1.5)
+    ax.set_xlabel("Predicted suicide rate")
+    ax.set_ylabel("Residual (Actual - Predicted)")
+    ax.set_title(title, fontweight="bold")
+    plt.tight_layout()
+    return fig
+
+
+def plot_error_by_year(
+    df_years, actual, predicted, title="Mean Absolute Error by Year"
+):
+    """
+    Line plot of mean absolute error per year. Useful for spotting whether
+    error is concentrated in specific periods (e.g. a structural shift or
+    an external shock) rather than spread evenly across the evaluation set.
+
+    Parameters
+    ----------
+    df_years : pd.DataFrame or array-like
+        Must align positionally with `actual`/`predicted` (same row order,
+        same length) and contain a "Year" column — e.g.
+        df_val_B[["Year"]].reset_index(drop=True).
+    actual : array-like
+    predicted : array-like
+    title : str, default "Mean Absolute Error by Year"
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    years = pd.DataFrame(df_years).reset_index(drop=True)["Year"].to_numpy()
+    abs_error = np.abs(np.asarray(actual) - np.asarray(predicted))
+
+    error_by_year = (
+        pd.DataFrame({"Year": years, "Absolute Error": abs_error})
+        .groupby("Year")["Absolute Error"]
+        .mean()
+        .sort_index()
+    )
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    ax.plot(error_by_year.index, error_by_year.values, marker="o", color="#4C72B0")
+    ax.set_xticks(error_by_year.index.astype(int))
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Mean Absolute Error")
+    ax.set_title(title, fontweight="bold")
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    return fig
+
+
+def mean_absolute_error_by_country(df_countries, actual, predicted, top_n=10):
+    """
+    Mean absolute error per country, sorted descending — the countries the
+    model struggles with most appear first.
+
+    Parameters
+    ----------
+    df_countries : pd.DataFrame or array-like
+        Must align positionally with `actual`/`predicted` (same row order,
+        same length) and contain a "Country" column — e.g.
+        df_val_B[["Country"]].reset_index(drop=True).
+    actual : array-like
+    predicted : array-like
+    top_n : int, default 10
+        Number of highest-error countries to return.
+
+    Returns
+    -------
+    pd.Series
+        Index: country name. Values: mean absolute error, descending,
+        truncated to top_n.
+    """
+    countries = pd.DataFrame(df_countries).reset_index(drop=True)["Country"].to_numpy()
+    abs_error = np.abs(np.asarray(actual) - np.asarray(predicted))
+
+    error_by_country = (
+        pd.DataFrame({"Country": countries, "Absolute Error": abs_error})
+        .groupby("Country")["Absolute Error"]
+        .mean()
+        .sort_values(ascending=False)
+    )
+    return error_by_country.head(top_n)

@@ -27,6 +27,7 @@ Master's thesis (TFM) project: predicting suicide rates across EU countries from
 │   ├── models.py              # Model registry, hyperparameter grids, train/evaluate
 │   ├── metrics.py             # Result table builder
 │   └── diagnostics.py         # All plotting functions
+├── vis/                       # Visualization reports (PowerBI/Tableau)
 ├── requirements.txt
 └── TODO.md                    # Open TODOs / future work
 ```
