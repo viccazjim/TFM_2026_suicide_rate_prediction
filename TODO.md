@@ -9,7 +9,7 @@ Completion:
 
 Next steps:
 
-- [ ] prod/ filling
+- [x] prod/ filling
 - [ ] Clustering (non-supervised).
 - [ ] Neural network.
 - [ ] Data visualization.

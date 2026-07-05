@@ -21,7 +21,9 @@ from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")
+matplotlib.use(
+    "Agg"
+)  # headless: this script only saves figures to disk, never displays them
 
 import pandas as pd
 
@@ -51,6 +53,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DEVELOPMENT_CSV_PATH = REPO_ROOT / "data" / "processed" / "df_development.csv"
+REAL_WORLD_CSV_PATH = REPO_ROOT / "data" / "processed" / "df_real_world.csv"
 FIGURES_DIR = REPO_ROOT / "outputs" / "figures"
 FIG_PREFIX = "02_"
 
@@ -170,6 +173,28 @@ def run() -> pd.DataFrame:
     # --- Save ---
     df_development.to_csv(DEVELOPMENT_CSV_PATH, index=False)
     logger.info("Saved (updated): %s", DEVELOPMENT_CSV_PATH)
+
+    # --- Apply the same structural changes to df_real_world for consistency ---
+    # (Region + drop Eating disorders), so predict.py scores a dataframe with
+    # exactly the same columns df_development has, not a slightly different one.
+    # "Suicide rate" is intentionally left as-is (all NaN) — it's the real
+    # target, just not yet published by WHO for 2022-2023, not an error to fix.
+    if REAL_WORLD_CSV_PATH.exists():
+        logger.info(
+            "Applying the same cleaning to df_real_world: %s", REAL_WORLD_CSV_PATH
+        )
+        df_real_world = pd.read_csv(REAL_WORLD_CSV_PATH)
+        df_real_world["Region"] = df_real_world["Code"].map(EU_REGIONS)
+        df_real_world = df_real_world.drop(
+            columns=["Eating disorders"], errors="ignore"
+        )
+        df_real_world.to_csv(REAL_WORLD_CSV_PATH, index=False)
+        logger.info("Saved (updated): %s", REAL_WORLD_CSV_PATH)
+    else:
+        logger.warning(
+            "%s not found — skipping (run prod/01_data_pipeline.py first if you need it).",
+            REAL_WORLD_CSV_PATH,
+        )
 
     return df_development
 

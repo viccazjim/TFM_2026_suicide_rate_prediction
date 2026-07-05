@@ -49,6 +49,8 @@ from src.diagnostics import (
     plot_residuals_vs_predicted,
     plot_error_by_year,
     mean_absolute_error_by_country,
+    plot_predictions_trend,
+    plot_predictions_by_country,
 )
 
 from src.explainability import (
@@ -57,7 +59,6 @@ from src.explainability import (
     plot_shap_summary,
     plot_shap_waterfall,
 )
-
 from src.persistence import (
     save_artifact,
     load_artifact,

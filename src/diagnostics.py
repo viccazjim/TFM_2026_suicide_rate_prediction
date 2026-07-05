@@ -664,3 +664,93 @@ def mean_absolute_error_by_country(df_countries, actual, predicted, top_n=10):
         .sort_values(ascending=False)
     )
     return error_by_country.head(top_n)
+
+
+# --------------------------------------------------------------------------
+# Visualizing predict.py output (df_real_world scoring)
+# --------------------------------------------------------------------------
+def plot_predictions_trend(df_history, df_predictions, country_code, country_name):
+    """
+    Plots a country's historical suicide rate (solid line) together
+    with its predicted rate for years outside the training data
+    (dashed line, connected to the last historical point) — a visual
+    sanity check for whether predict.py's output looks like a
+    plausible continuation of the country's own trend, rather than an
+    implausible jump.
+
+    Parameters
+    ----------
+    df_history : pd.DataFrame
+        Historical data with "Code", "Year", "Suicide rate" — typically
+        df_development (2000-2021, actual values).
+    df_predictions : pd.DataFrame
+        Output of predict.py, with "Code", "Year", "Predicted suicide rate".
+    country_code : str
+        3-letter ISO code (e.g. "GRC").
+    country_name : str
+        Display name for the title (e.g. "Greece").
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    df_hist = df_history[df_history["Code"] == country_code].sort_values("Year")
+    df_pred = df_predictions[df_predictions["Code"] == country_code].sort_values("Year")
+
+    fig = plt.figure(figsize=(12, 6))
+    plt.plot(
+        df_hist["Year"], df_hist["Suicide rate"],
+        color="#1f77b4", linestyle="-", marker="o", linewidth=2.5, label="Actual",
+    )
+
+    if not df_hist.empty and not df_pred.empty:
+        # Prepend the last actual point so the predicted segment visually
+        # connects to history instead of floating as a disjointed line.
+        connector_years = [df_hist["Year"].iloc[-1]] + df_pred["Year"].tolist()
+        connector_values = [df_hist["Suicide rate"].iloc[-1]] + df_pred["Predicted suicide rate"].tolist()
+        plt.plot(
+            connector_years, connector_values,
+            color="#d62728", linestyle="--", marker="s", linewidth=2.5, label="Predicted",
+        )
+
+    plt.title(f"Suicide rate: actual vs predicted — {country_name}", fontsize=16, fontweight="bold", pad=15)
+    plt.xlabel("Year", fontsize=12)
+    plt.ylabel("Rate per 100,000 inhabitants", fontsize=12)
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    return fig
+
+
+def plot_predictions_by_country(df_predictions, year, top_n=None):
+    """
+    Bar chart of predicted suicide rate per country for a given year,
+    sorted descending.
+
+    Parameters
+    ----------
+    df_predictions : pd.DataFrame
+        Output of predict.py, with "Country", "Year", "Predicted suicide rate".
+    year : int
+        Which predicted year to plot (e.g. 2022).
+    top_n : int, optional
+        If given, only the top_n highest-predicted countries are shown.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    df_year = df_predictions[df_predictions["Year"] == year].sort_values(
+        "Predicted suicide rate", ascending=False
+    )
+    if top_n:
+        df_year = df_year.head(top_n)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar(df_year["Country"], df_year["Predicted suicide rate"], color="#4C72B0")
+    ax.set_title(f"Predicted suicide rate by country — {year}", fontweight="bold")
+    ax.set_xlabel("Country")
+    ax.set_ylabel("Predicted rate per 100,000 inhabitants")
+    ax.tick_params(axis="x", rotation=75)
+    plt.tight_layout()
+    return fig
