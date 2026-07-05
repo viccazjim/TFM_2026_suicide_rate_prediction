@@ -34,6 +34,7 @@ from src.metrics import (
     metrics_by_period,
 )
 from src.diagnostics import (
+    save_figure,
     suicide_evolution_graph,
     plot_vif_bar,
     plot_suicide_trend_by_region,

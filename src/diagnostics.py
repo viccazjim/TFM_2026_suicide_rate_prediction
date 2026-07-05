@@ -7,6 +7,47 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
+import os
+
+
+def save_figure(
+    fig, name: str, prefix: str = "", figures_dir: str = "../outputs/figures"
+) -> str:
+    """
+    Saves a matplotlib figure as PNG under `figures_dir`, named
+    "{prefix}{name}.png".
+
+    The prefix is meant to encode which notebook/pipeline step produced
+    the figure (e.g. "02_" for 02_eda.ipynb, "03_" for 03_models.ipynb),
+    so outputs/figures/ stays organized by pipeline stage as more
+    notebooks contribute plots, without every notebook needing to know
+    about the others' naming.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        Returned by any plotting function in diagnostics.py / explainability.py.
+    name : str
+        Descriptive, filesystem-safe name, without extension or prefix
+        (e.g. "vif_before_drop").
+    prefix : str, default ""
+        Prepended directly to `name` — no separator is added
+        automatically, so pass e.g. "02_" (with the trailing
+        underscore) if you want "02_vif_before_drop.png".
+    figures_dir : str, default "../outputs/figures"
+        Path relative to the notebook's own working directory
+        (typically notebooks/), so the default resolves to
+        outputs/figures/ at the repo root. Created if it doesn't exist.
+
+    Returns
+    -------
+    str
+        Full path the figure was saved to.
+    """
+    os.makedirs(figures_dir, exist_ok=True)
+    path = os.path.join(figures_dir, f"{prefix}{name}.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    return path
 
 
 def suicide_evolution_graph(dataframe, country_code, country_name):
@@ -576,7 +617,12 @@ def plot_error_by_year(
     )
 
     fig, ax = plt.subplots(figsize=(9, 4.5))
-    ax.plot(error_by_year.index, error_by_year.values, marker="o", color="#4C72B0")
+    ax.plot(
+        error_by_year.index.to_numpy(),
+        error_by_year.to_numpy(),
+        marker="o",
+        color="#4C72B0",
+    )
     ax.set_xticks(error_by_year.index.astype(int))
     ax.set_xlabel("Year")
     ax.set_ylabel("Mean Absolute Error")

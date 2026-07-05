@@ -170,4 +170,5 @@ def plot_shap_waterfall(shap_values, index: int = 0, title: Optional[str] = None
     if title:
         fig.axes[-1].set_title(title, fontweight="bold")
     plt.tight_layout()
+    plt.show()
     return fig

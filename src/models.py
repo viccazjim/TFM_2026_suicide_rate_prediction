@@ -44,7 +44,7 @@ param_grids = {
         "iterations": [200, 400],
         "depth": [3, 4, 5],
         "learning_rate": [0.05, 0.1],
-        "l2_leaf_reg": [3, 7],
+        "l2_leaf_reg": [3, 7, 15],
     },
 }
 

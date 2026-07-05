@@ -2,13 +2,14 @@
 
 Completion:
 
-- [ ] Store graphs for thesis.
-- [ ] Results summary with graphs.
-- [ ] Model results reasoning.
-  - [ ] Plots from Mario's notebook.
+- [x] Store graphs for thesis.
+- [x] Results summary with graphs.
+- [x] Model results reasoning.
+  - [x] Plots from Mario's notebook.
 
 Next steps:
 
+- [ ] prod/ filling
 - [ ] Clustering (non-supervised).
 - [ ] Neural network.
 - [ ] Data visualization.
