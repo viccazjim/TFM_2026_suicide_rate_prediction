@@ -53,7 +53,7 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-[Seguro] `requirements.txt` is a full environment freeze (includes the Jupyter/JupyterLab stack), not a curated minimal dependency list. The packages the pipeline actually imports: `numpy`, `pandas`, `scikit-learn`, `xgboost`, `catboost`, `shap`, `joblib`, `statsmodels`, `pycountry`, `requests`, `matplotlib`, `seaborn`.
+`requirements.txt` is a full environment freeze (includes the Jupyter/JupyterLab stack), not a curated minimal dependency list. The packages the pipeline actually imports: `numpy`, `pandas`, `scikit-learn`, `xgboost`, `catboost`, `shap`, `joblib`, `statsmodels`, `pycountry`, `requests`, `matplotlib`, `seaborn`.
 
 ## Data sources
 
