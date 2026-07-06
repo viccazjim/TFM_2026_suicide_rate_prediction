@@ -28,6 +28,13 @@ from src.models import (
     train_model,
     evaluate_model,
 )
+from src.clustering import (
+    aggregate_country_features,
+    sweep_kmeans,
+    run_kmeans,
+    run_hierarchical,
+    cluster_region_agreement,
+)
 from src.metrics import (
     build_results_table,
     get_eval_entry,
@@ -51,6 +58,9 @@ from src.diagnostics import (
     mean_absolute_error_by_country,
     plot_predictions_trend,
     plot_predictions_by_country,
+    plot_kmeans_elbow_silhouette,
+    plot_dendrogram,
+    plot_cluster_vs_region_pca,
 )
 
 from src.explainability import (

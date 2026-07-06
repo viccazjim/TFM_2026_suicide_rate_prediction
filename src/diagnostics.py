@@ -8,6 +8,8 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 import os
+from scipy.cluster.hierarchy import dendrogram
+from sklearn.decomposition import PCA
 
 
 def save_figure(
@@ -752,5 +754,129 @@ def plot_predictions_by_country(df_predictions, year, top_n=None):
     ax.set_xlabel("Country")
     ax.set_ylabel("Predicted rate per 100,000 inhabitants")
     ax.tick_params(axis="x", rotation=75)
+    plt.tight_layout()
+    return fig
+
+
+# --------------------------------------------------------------------------
+# Clustering visualization (validating EU_REGIONS + general unsupervised analysis)
+# --------------------------------------------------------------------------
+def plot_kmeans_elbow_silhouette(sweep_df: pd.DataFrame):
+    """
+    Side-by-side elbow (inertia) and silhouette plots across the k
+    values tested by sweep_kmeans() — the elbow suggests where adding
+    another cluster stops meaningfully reducing within-cluster
+    variance, the silhouette score directly measures cluster
+    separation (higher is better).
+
+    Parameters
+    ----------
+    sweep_df : pd.DataFrame
+        Output of clustering.sweep_kmeans() — columns "k", "inertia", "silhouette".
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+    axes[0].plot(sweep_df["k"], sweep_df["inertia"], marker="o", color="#4C72B0")
+    axes[0].set_xlabel("k (number of clusters)")
+    axes[0].set_ylabel("Inertia (within-cluster variance)")
+    axes[0].set_title("Elbow method", fontweight="bold")
+    axes[0].grid(linestyle="--", alpha=0.5)
+
+    axes[1].plot(sweep_df["k"], sweep_df["silhouette"], marker="o", color="#DD8452")
+    best_k = sweep_df.loc[sweep_df["silhouette"].idxmax(), "k"]
+    axes[1].axvline(best_k, color="gray", linestyle="--", alpha=0.7, label=f"Best: k={int(best_k)}")
+    axes[1].set_xlabel("k (number of clusters)")
+    axes[1].set_ylabel("Silhouette score")
+    axes[1].set_title("Silhouette score", fontweight="bold")
+    axes[1].legend()
+    axes[1].grid(linestyle="--", alpha=0.5)
+
+    plt.tight_layout()
+    return fig
+
+
+def plot_dendrogram(linkage_matrix, labels, k: int = None, title: str = "Hierarchical clustering — dendrogram"):
+    """
+    Dendrogram for agglomerative hierarchical clustering, with country
+    codes as leaf labels. Lets you see visually where a k-cluster cut
+    would fall, rather than only getting the final labels.
+
+    Parameters
+    ----------
+    linkage_matrix : np.ndarray
+        First element returned by clustering.run_hierarchical().
+    labels : list[str]
+        Leaf labels, one per row of the original data, same order —
+        typically country ISO codes.
+    k : int, optional
+        If given, draws a horizontal line at the height that would cut
+        the tree into k clusters, and colors branches accordingly.
+    title : str, default "Hierarchical clustering — dendrogram"
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    fig, ax = plt.subplots(figsize=(13, 6))
+
+    color_threshold = None
+    if k is not None and k > 1:
+        heights = np.sort(linkage_matrix[:, 2])
+        n_merges_to_keep = len(heights) - (k - 1)
+        color_threshold = heights[n_merges_to_keep - 1] if n_merges_to_keep > 0 else 0
+
+    dendrogram(linkage_matrix, labels=labels, ax=ax, color_threshold=color_threshold, leaf_font_size=10)
+
+    ax.set_title(title, fontweight="bold")
+    ax.set_xlabel("Country")
+    ax.set_ylabel("Distance (Ward linkage)")
+    plt.tight_layout()
+    return fig
+
+
+def plot_cluster_vs_region_pca(X_scaled: pd.DataFrame, cluster_labels, region_labels, country_codes):
+    """
+    Two side-by-side PCA scatter plots (2 components) of the same
+    country-level feature space: one colored by cluster assignment, one
+    colored by the a priori EU_REGIONS label — a direct visual check of
+    whether the two partitions carve up the countries the same way.
+
+    Parameters
+    ----------
+    X_scaled : pd.DataFrame
+        Scaled country-level features.
+    cluster_labels : array-like
+        One cluster id per row of X_scaled, same order.
+    region_labels : array-like
+        One EU_REGIONS value per row of X_scaled, same order.
+    country_codes : array-like
+        One ISO code per row, same order — used to annotate points.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    pca = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(X_scaled)
+    var_explained = pca.explained_variance_ratio_
+
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+
+    for ax, hue, title in [
+        (axes[0], cluster_labels, "Colored by cluster"),
+        (axes[1], region_labels, "Colored by EU_REGIONS (a priori)"),
+    ]:
+        sns.scatterplot(x=coords[:, 0], y=coords[:, 1], hue=hue, palette="tab10", s=120, ax=ax, legend="full")
+        for i, code in enumerate(country_codes):
+            ax.annotate(code, (coords[i, 0], coords[i, 1]), fontsize=8, xytext=(4, 4), textcoords="offset points")
+        ax.set_title(title, fontweight="bold")
+        ax.set_xlabel(f"PC1 ({var_explained[0]:.0%} var.)")
+        ax.set_ylabel(f"PC2 ({var_explained[1]:.0%} var.)")
+        ax.grid(linestyle="--", alpha=0.4)
+
     plt.tight_layout()
     return fig
