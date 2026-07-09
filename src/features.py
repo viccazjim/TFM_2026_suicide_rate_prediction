@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools import add_constant
+from typing import Optional
 
 
 def compute_vif(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
@@ -53,7 +54,10 @@ def compute_vif(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
 
 
 def build_predictor_list(
-    df: pd.DataFrame, id_cols: list[str], target: str, extra_exclude: list[str] = None
+    df: pd.DataFrame,
+    id_cols: list[str],
+    target: str,
+    extra_exclude: Optional[list[str]] = None,
 ) -> list[str]:
     """
     Returns every column in df that is neither an ID column, the target,
