@@ -89,7 +89,7 @@ HEALTH_RELATED_FEATURES = [
     "Depressive disorders",
     "Schizophrenia",
     "Drug use disorders",
-    # Eating disorders excluded — high VIF (12.3), dropped in the multicollinearity step. Kept out of the list once the decision was made in the EDA notebook.
+    # Eating disorders excluded — high VIF (12.098), dropped in the multicollinearity step. Kept out of the list once the decision was made in the EDA notebook.
 ]
 
 ID_COLS = ["Country", "Code", "Year", "Region"]
