@@ -1,16 +1,22 @@
 """
 Orchestrator: runs the full pipeline in order —
-Ingestion/Cleaning (01) -> EDA (02) -> Training/Evaluation (03).
+Ingestion/Cleaning (01) -> EDA (02) -> Clustering validation (03) ->
+Training/Evaluation (04) -> Inference (Pred) -> Prediction plots (05).
 
 Each stage runs as an independent process (not an import), on purpose:
 that way a failure in one stage doesn't leave the interpreter in a
 half-built state for the next one, and each stage's log stays separate
 with its own exit code.
 
+Note the fix relative to the previous version of this script: "Pred"
+now runs *before* "05" — 05_visualize_predictions.py reads
+outputs/tables/predictions.csv, which only exists once predict.py has
+run. The old default order ran them the other way round.
+
 Usage:
-    python prod/run_pipeline.py            # all three stages
+    python prod/run_pipeline.py            # every stage, in order
     python prod/run_pipeline.py --skip-01  # reuse existing data/processed/
-    python prod/run_pipeline.py --only 03  # training only (requires 01+02 already run)
+    python prod/run_pipeline.py --only 04  # training only (requires 01-03 already run)
 """
 
 import argparse
@@ -22,18 +28,19 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROD_DIR = REPO_ROOT / "prod"
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 STAGES = {
     "01": PROD_DIR / "01_data_pipeline.py",
     "02": PROD_DIR / "02_eda.py",
-    "03": PROD_DIR / "03_train.py",
-    "04": PROD_DIR / "04_visualize_predictions.py",
+    "03": PROD_DIR / "03_clustering.py",
+    "04": PROD_DIR / "04_train.py",
     "Pred": PROD_DIR / "predict.py",
+    "05": PROD_DIR / "05_visualize_predictions.py",
 }
+
+DEFAULT_ORDER = ["01", "02", "03", "04", "Pred", "05"]
 
 
 def run_stage(stage_key: str):
@@ -43,11 +50,7 @@ def run_stage(stage_key: str):
     logger.info("=" * 60)
     result = subprocess.run([sys.executable, str(script_path)], cwd=str(REPO_ROOT))
     if result.returncode != 0:
-        logger.error(
-            "Stage %s failed (exit code %d) — stopping the pipeline.",
-            stage_key,
-            result.returncode,
-        )
+        logger.error("Stage %s failed (exit code %d) — stopping the pipeline.", stage_key, result.returncode)
         sys.exit(result.returncode)
     logger.info("Stage %s completed successfully.\n", stage_key)
 
@@ -59,29 +62,19 @@ def run(stage_keys):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--skip-01", action="store_true", help="Skip stage 01 (ingestion/cleaning)"
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--skip-01", action="store_true", help="Skip stage 01 (ingestion/cleaning)")
     parser.add_argument("--skip-02", action="store_true", help="Skip stage 02 (EDA)")
-    parser.add_argument(
-        "--only",
-        choices=["01", "02", "03", "04", "Pred"],
-        help="Run only one specific stage",
-    )
+    parser.add_argument("--skip-03", action="store_true", help="Skip stage 03 (clustering validation)")
+    parser.add_argument("--only", choices=list(STAGES.keys()), help="Run only one specific stage")
     args = parser.parse_args()
 
     if args.only:
         run([args.only])
     else:
-        keys = []
-        if not args.skip_01:
-            keys.append("01")
-        if not args.skip_02:
-            keys.append("02")
-        keys.append("03")
-        keys.append("04")
-        keys.append("Pred")
+        keys = [k for k in DEFAULT_ORDER if not (
+            (k == "01" and args.skip_01) or
+            (k == "02" and args.skip_02) or
+            (k == "03" and args.skip_03)
+        )]
         run(keys)

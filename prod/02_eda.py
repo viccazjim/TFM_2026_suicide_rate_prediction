@@ -52,8 +52,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DEVELOPMENT_CSV_PATH = REPO_ROOT / "data" / "processed" / "df_development.csv"
-REAL_WORLD_CSV_PATH = REPO_ROOT / "data" / "processed" / "df_real_world.csv"
+DEVELOPMENT_PATH = REPO_ROOT / "data" / "processed" / "df_development.parquet"
+REAL_WORLD_PATH = REPO_ROOT / "data" / "processed" / "df_real_world.parquet"
 FIGURES_DIR = REPO_ROOT / "outputs" / "figures"
 FIG_PREFIX = "02_"
 
@@ -68,7 +68,7 @@ def run() -> pd.DataFrame:
     pd.DataFrame
         The cleaned df_development (same object saved to disk).
     """
-    df_development = pd.read_csv(DEVELOPMENT_CSV_PATH)
+    df_development = pd.read_parquet(DEVELOPMENT_PATH)
     logger.info(
         "df_development: %d rows, %d columns",
         df_development.shape[0],
@@ -171,29 +171,29 @@ def run() -> pd.DataFrame:
     )
 
     # --- Save ---
-    df_development.to_csv(DEVELOPMENT_CSV_PATH, index=False)
-    logger.info("Saved (updated): %s", DEVELOPMENT_CSV_PATH)
+    df_development.to_parquet(DEVELOPMENT_PATH, index=False)
+    logger.info("Saved (updated): %s", DEVELOPMENT_PATH)
 
     # --- Apply the same structural changes to df_real_world for consistency ---
     # (Region + drop Eating disorders), so predict.py scores a dataframe with
     # exactly the same columns df_development has, not a slightly different one.
     # "Suicide rate" is intentionally left as-is (all NaN) — it's the real
     # target, just not yet published by WHO for 2022-2023, not an error to fix.
-    if REAL_WORLD_CSV_PATH.exists():
+    if REAL_WORLD_PATH.exists():
         logger.info(
-            "Applying the same cleaning to df_real_world: %s", REAL_WORLD_CSV_PATH
+            "Applying the same cleaning to df_real_world: %s", REAL_WORLD_PATH
         )
-        df_real_world = pd.read_csv(REAL_WORLD_CSV_PATH)
+        df_real_world = pd.read_parquet(REAL_WORLD_PATH)
         df_real_world["Region"] = df_real_world["Code"].map(EU_REGIONS)
         df_real_world = df_real_world.drop(
             columns=["Eating disorders"], errors="ignore"
         )
-        df_real_world.to_csv(REAL_WORLD_CSV_PATH, index=False)
-        logger.info("Saved (updated): %s", REAL_WORLD_CSV_PATH)
+        df_real_world.to_parquet(REAL_WORLD_PATH, index=False)
+        logger.info("Saved (updated): %s", REAL_WORLD_PATH)
     else:
         logger.warning(
             "%s not found — skipping (run prod/01_data_pipeline.py first if you need it).",
-            REAL_WORLD_CSV_PATH,
+            REAL_WORLD_PATH,
         )
 
     return df_development
