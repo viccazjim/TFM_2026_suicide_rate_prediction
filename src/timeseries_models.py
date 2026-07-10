@@ -149,10 +149,116 @@ def train_evaluate_sarimax(
     return eval_results, pd.DataFrame(per_country_rows)
 
 
+def fit_sarimax_models(
+    df_train: pd.DataFrame,
+    target: str,
+    exog_features: list[str] = None,
+    id_col: str = "Code",
+    year_col: str = "Year",
+    order: tuple = (1, 1, 0),
+) -> dict:
+    """
+    Fits one SARIMAX per country and returns the fitted results objects,
+    without forecasting or evaluating — used to extend a forecast past
+    the years train_evaluate_sarimax() checked (e.g. into
+    df_real_world's years), separate from that function's fit +
+    forecast + pooled-evaluation flow used to compare against the
+    naive baseline and the panel models.
+
+    Parameters
+    ----------
+    df_train : pd.DataFrame
+    target : str
+    exog_features : list[str], optional
+        Same overfitting caveat as train_evaluate_sarimax() — default
+        None (univariate).
+    id_col : str, default "Code"
+    year_col : str, default "Year"
+    order : tuple, default (1, 1, 0)
+
+    Returns
+    -------
+    dict[str, SARIMAXResultsWrapper]
+        {country_code: fitted results}. Countries where fitting failed
+        are simply absent.
+    """
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+    models = {}
+    for code in sorted(df_train[id_col].unique()):
+        train_c = df_train[df_train[id_col] == code].sort_values(year_col)
+        y_train = train_c[target].to_numpy()
+        exog_train = train_c[exog_features].to_numpy() if exog_features else None
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                models[code] = SARIMAX(
+                    y_train, exog=exog_train, order=order,
+                    enforce_stationarity=False, enforce_invertibility=False,
+                ).fit(disp=False)
+        except Exception as e:
+            logger.warning("SARIMAX failed to fit for %s: %s", code, e)
+
+    return models
+
+
+def forecast_sarimax(models: dict, code: str, years_exog_df: pd.DataFrame, year_col: str = "Year",
+                      exog_features: list[str] = None) -> pd.Series:
+    """
+    Forecasts a contiguous block of years for one country using an
+    already-fitted SARIMAX from fit_sarimax_models().
+
+    Unlike Prophet, SARIMAX's `.forecast()` walks forward step by step
+    from the end of its training data — to reach a year far past
+    training (e.g. df_real_world's 2022-2023, when the model was fit
+    through ~2014), you must forecast *every* intervening year in
+    order, exogenous values included, and take only the years you
+    actually want from the result. `years_exog_df` must therefore
+    contain every year from immediately after training through the
+    furthest year you want — not just the years you're ultimately
+    interested in — sorted ascending.
+
+    Parameters
+    ----------
+    models : dict[str, SARIMAXResultsWrapper]
+        Output of fit_sarimax_models().
+    code : str
+        Country ISO code — must be a key in `models`.
+    years_exog_df : pd.DataFrame
+        One row per year, `year_col` plus `exog_features` (if used),
+        covering the *entire* contiguous span from just after training
+        through the last year needed. Sorted ascending by year.
+    year_col : str, default "Year"
+    exog_features : list[str], optional
+        Must match what the model in `models` was fit with.
+
+    Returns
+    -------
+    pd.Series
+        Forecasted values, indexed by year, covering every year in
+        `years_exog_df` — slice out the specific years you need from
+        the result (e.g. `result.loc[[2022, 2023]]`).
+
+    Raises
+    ------
+    KeyError
+        If `code` has no fitted model.
+    """
+    if code not in models:
+        raise KeyError(f"No fitted SARIMAX model for country '{code}'")
+
+    years_exog_df = years_exog_df.sort_values(year_col)
+    exog_forecast = years_exog_df[exog_features].to_numpy() if exog_features else None
+    forecast = models[code].forecast(steps=len(years_exog_df), exog=exog_forecast)
+    return pd.Series(np.asarray(forecast), index=years_exog_df[year_col].to_numpy())
+
+
 def fit_prophet_models(
     df_train: pd.DataFrame,
     target: str,
     exog_features: list[str] = None,
+
     id_col: str = "Code",
     year_col: str = "Year",
 ) -> dict:

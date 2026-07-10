@@ -139,6 +139,54 @@ def plot_suicide_trend_by_region(df: pd.DataFrame):
     return fig
 
 
+def plot_suicide_trend_by_group(df: pd.DataFrame, group_col: str, legend_title: str = None, title: str = None):
+    """
+    Line plot of average suicide rate over time, one line per group —
+    generalizes plot_suicide_trend_by_region() to any grouping column,
+    e.g. a K-Means cluster label. Built specifically so the a priori
+    EU_REGIONS trend and the data-driven cluster trend can be produced
+    with the same function and compared visually side by side, rather
+    than eyeballing two differently-styled plots.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must contain "Year", "Suicide rate", and `group_col`.
+    group_col : str
+        Column to group by — e.g. "Region" or "Cluster".
+    legend_title : str, optional
+        Defaults to `group_col`.
+    title : str, optional
+        Defaults to a generic title mentioning `group_col`.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    fig = plt.figure(figsize=(14, 7))
+    sns.lineplot(
+        data=df,
+        x="Year",
+        y="Suicide rate",
+        hue=group_col,
+        marker="o",
+        linewidth=2.5,
+        errorbar=None,
+        palette="tab10",
+    )
+    plt.title(
+        title or f"Suicide rate evolution in the EU by {group_col} (2000-2021)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    plt.xlabel("Year")
+    plt.ylabel("Average rate per 100,000 inhabitants")
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend(title=legend_title or group_col)
+    plt.tight_layout()
+    return fig
+
+
 def plot_suicide_boxplot_by_country(df: pd.DataFrame):
     """
     Boxplot of suicide rate distribution per country, ordered by median
@@ -754,6 +802,200 @@ def plot_predictions_by_country(df_predictions, year, top_n=None):
     ax.set_xlabel("Country")
     ax.set_ylabel("Predicted rate per 100,000 inhabitants")
     ax.tick_params(axis="x", rotation=75)
+    plt.tight_layout()
+    return fig
+
+
+def plot_predictions_model_comparison(df_history, df_predictions_a, df_predictions_b, model_a_name, model_b_name, country_code, country_name):
+    """
+    Like plot_predictions_trend(), but overlays TWO predicted series
+    instead of one — e.g. the production CatBoost model (which answers
+    the thesis's actual question, using only socioeconomic/mental-health
+    determinants) against the best temporal-persistence model from
+    05_temporal_persistence_check.ipynb (which answers a different
+    question — see that notebook's introduction). Plotting them
+    together shows directly whether the two tell a similar story for a
+    given country or diverge, rather than comparing single numbers in
+    a table.
+
+    Parameters
+    ----------
+    df_history : pd.DataFrame
+        Historical data with "Code", "Year", "Suicide rate".
+    df_predictions_a, df_predictions_b : pd.DataFrame
+        Each with "Code", "Year", "Predicted suicide rate" — e.g.
+        predict.py's output for A, a SARIMAX/Prophet forecast for B.
+    model_a_name, model_b_name : str
+        Labels for the legend (e.g. "CatBoost", "SARIMAX +1 exog").
+    country_code : str
+    country_name : str
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    df_hist = df_history[df_history["Code"] == country_code].sort_values("Year")
+    df_pred_a = df_predictions_a[df_predictions_a["Code"] == country_code].sort_values("Year")
+    df_pred_b = df_predictions_b[df_predictions_b["Code"] == country_code].sort_values("Year")
+
+    fig = plt.figure(figsize=(12, 6))
+    plt.plot(
+        df_hist["Year"], df_hist["Suicide rate"],
+        color="#1f77b4", linestyle="-", marker="o", linewidth=2.5, label="Actual",
+    )
+
+    for df_pred, color, label in [
+        (df_pred_a, "#d62728", model_a_name),
+        (df_pred_b, "#2ca02c", model_b_name),
+    ]:
+        if df_hist.empty or df_pred.empty:
+            continue
+        connector_years = [df_hist["Year"].iloc[-1]] + df_pred["Year"].tolist()
+        connector_values = [df_hist["Suicide rate"].iloc[-1]] + df_pred["Predicted suicide rate"].tolist()
+        plt.plot(
+            connector_years, connector_values,
+            color=color, linestyle="--", marker="s", linewidth=2.5, label=label,
+        )
+
+    plt.title(f"Suicide rate: actual vs predicted — {country_name}", fontsize=16, fontweight="bold", pad=15)
+    plt.xlabel("Year", fontsize=12)
+    plt.ylabel("Rate per 100,000 inhabitants", fontsize=12)
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    return fig
+
+
+def plot_predictions_by_country_comparison(df_predictions_a, df_predictions_b, model_a_name, model_b_name, year, top_n=None):
+    """
+    Grouped bar chart comparing two models' predicted suicide rate per
+    country, for a given year — side-by-side bars per country instead
+    of plot_predictions_by_country()'s single series.
+
+    Parameters
+    ----------
+    df_predictions_a, df_predictions_b : pd.DataFrame
+        Each with "Country", "Year", "Predicted suicide rate".
+    model_a_name, model_b_name : str
+        Labels for the legend.
+    year : int
+    top_n : int, optional
+        If given, keeps only the top_n countries by model_a's prediction.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    a = df_predictions_a[df_predictions_a["Year"] == year][["Country", "Predicted suicide rate"]]
+    b = df_predictions_b[df_predictions_b["Year"] == year][["Country", "Predicted suicide rate"]]
+    merged = a.merge(b, on="Country", suffixes=(f"_{model_a_name}", f"_{model_b_name}"))
+    merged = merged.sort_values(f"Predicted suicide rate_{model_a_name}", ascending=False)
+    if top_n:
+        merged = merged.head(top_n)
+
+    x = np.arange(len(merged))
+    width = 0.38
+
+    fig, ax = plt.subplots(figsize=(13, 6))
+    ax.bar(x - width / 2, merged[f"Predicted suicide rate_{model_a_name}"], width, label=model_a_name, color="#d62728")
+    ax.bar(x + width / 2, merged[f"Predicted suicide rate_{model_b_name}"], width, label=model_b_name, color="#2ca02c")
+    ax.set_title(f"Predicted suicide rate by country — {year} ({model_a_name} vs {model_b_name})", fontweight="bold")
+    ax.set_xlabel("Country")
+    ax.set_ylabel("Predicted rate per 100,000 inhabitants")
+    ax.set_xticks(x)
+    ax.set_xticklabels(merged["Country"], rotation=75, ha="right")
+    ax.legend()
+    plt.tight_layout()
+    return fig
+
+
+def plot_predictions_by_region_comparison(df_predictions_a, df_predictions_b, model_a_name, model_b_name, year):
+    """
+    Grouped bar chart comparing two models' predicted suicide rate,
+    averaged up to the a priori EU_REGIONS level, for a given year —
+    the region-level counterpart to plot_predictions_by_country_comparison().
+    Averaging countries into regions trades away the country-level
+    detail in exchange for a view of whether each model's predictions
+    line up with the a priori regional grouping used descriptively
+    throughout this project (02_eda.py, 04_clustering.py).
+
+    Parameters
+    ----------
+    df_predictions_a, df_predictions_b : pd.DataFrame
+        Each with "Code", "Year", "Predicted suicide rate", and
+        "Region" (add it first via
+        df["Region"] = df["Code"].map(EU_REGIONS) if not present).
+    model_a_name, model_b_name : str
+        Labels for the legend.
+    year : int
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    a = df_predictions_a[df_predictions_a["Year"] == year].groupby("Region")["Predicted suicide rate"].mean()
+    b = df_predictions_b[df_predictions_b["Year"] == year].groupby("Region")["Predicted suicide rate"].mean()
+    merged = pd.DataFrame({model_a_name: a, model_b_name: b}).dropna().sort_values(model_a_name, ascending=False)
+
+    x = np.arange(len(merged))
+    width = 0.38
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x - width / 2, merged[model_a_name], width, label=model_a_name, color="#d62728")
+    ax.bar(x + width / 2, merged[model_b_name], width, label=model_b_name, color="#2ca02c")
+    ax.set_title(f"Predicted suicide rate by EU region — {year} ({model_a_name} vs {model_b_name})", fontweight="bold")
+    ax.set_xlabel("EU region (a priori grouping)")
+    ax.set_ylabel("Average predicted rate per 100,000 inhabitants")
+    ax.set_xticks(x)
+    ax.set_xticklabels(merged.index, rotation=20, ha="right")
+    ax.legend()
+    plt.tight_layout()
+    return fig
+
+
+def plot_predictions_trend_by_region(df_history, df_predictions_a, df_predictions_b, model_a_name, model_b_name, region_name):
+    """
+    Region-level counterpart to plot_predictions_model_comparison():
+    historical average suicide rate for every country in `region_name`
+    (solid line), plus both models' region-average predicted rate for
+    the predicted years (two dashed lines) — same visual language,
+    aggregated up from country to region.
+
+    Parameters
+    ----------
+    df_history : pd.DataFrame
+        Historical data with "Region", "Year", "Suicide rate" (add
+        "Region" first via df["Region"] = df["Code"].map(EU_REGIONS)
+        if not present).
+    df_predictions_a, df_predictions_b : pd.DataFrame
+        Each with "Region", "Year", "Predicted suicide rate".
+    model_a_name, model_b_name : str
+    region_name : str
+        e.g. "Baltics".
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    hist = df_history[df_history["Region"] == region_name].groupby("Year")["Suicide rate"].mean().reset_index()
+    pred_a = df_predictions_a[df_predictions_a["Region"] == region_name].groupby("Year")["Predicted suicide rate"].mean().reset_index()
+    pred_b = df_predictions_b[df_predictions_b["Region"] == region_name].groupby("Year")["Predicted suicide rate"].mean().reset_index()
+
+    fig = plt.figure(figsize=(12, 6))
+    plt.plot(hist["Year"], hist["Suicide rate"], color="#1f77b4", linestyle="-", marker="o", linewidth=2.5, label="Actual")
+
+    for pred, color, label in [(pred_a, "#d62728", model_a_name), (pred_b, "#2ca02c", model_b_name)]:
+        if hist.empty or pred.empty:
+            continue
+        connector_years = [hist["Year"].iloc[-1]] + pred["Year"].tolist()
+        connector_values = [hist["Suicide rate"].iloc[-1]] + pred["Predicted suicide rate"].tolist()
+        plt.plot(connector_years, connector_values, color=color, linestyle="--", marker="s", linewidth=2.5, label=label)
+
+    plt.title(f"Suicide rate: actual vs predicted — {region_name} (region average)", fontsize=16, fontweight="bold", pad=15)
+    plt.xlabel("Year", fontsize=12)
+    plt.ylabel("Average rate per 100,000 inhabitants", fontsize=12)
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
     plt.tight_layout()
     return fig
 

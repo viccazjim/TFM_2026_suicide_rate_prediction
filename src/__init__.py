@@ -41,6 +41,8 @@ from src.clustering import (
 from src.timeseries_models import (
     train_evaluate_sarimax,
     train_evaluate_prophet,
+    fit_sarimax_models,
+    forecast_sarimax,
     fit_prophet_models,
     forecast_prophet,
 )
@@ -67,6 +69,11 @@ from src.diagnostics import (
     mean_absolute_error_by_country,
     plot_predictions_trend,
     plot_predictions_by_country,
+    plot_predictions_model_comparison,
+    plot_predictions_by_country_comparison,
+    plot_predictions_by_region_comparison,
+    plot_predictions_trend_by_region,
+    plot_suicide_trend_by_group,
     plot_kmeans_elbow_silhouette,
     plot_dendrogram,
     plot_cluster_vs_region_pca,

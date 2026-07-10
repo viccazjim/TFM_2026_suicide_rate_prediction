@@ -40,12 +40,15 @@ from src import (
     interpolate_with_trend_extrapolation,
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 IHME_CSV_PATH = REPO_ROOT / "data" / "raw" / "IHME-GBD_2023_DATA-b62eec84-1.csv"
+# Parquet instead of CSV for the processed datasets: columnar storage,
+# preserves dtypes across save/load (no re-inferring int/float/category on
+# every read), and compresses well — not something this dataset's size
+# demands today, but a habit worth having before a project's data grows
+# to the point where CSV round-trips actually become slow or lossy.
 DEVELOPMENT_PATH = REPO_ROOT / "data" / "processed" / "df_development.parquet"
 REAL_WORLD_PATH = REPO_ROOT / "data" / "processed" / "df_real_world.parquet"
 
@@ -79,8 +82,7 @@ def run() -> tuple[pd.DataFrame, pd.DataFrame]:
     )
     logger.info(
         "  After World Bank merge: %d rows, %d columns",
-        df_features.shape[0],
-        df_features.shape[1],
+        df_features.shape[0], df_features.shape[1],
     )
 
     # --- Step 3: WHO (suicide rate, target variable, API) ---
@@ -91,23 +93,17 @@ def run() -> tuple[pd.DataFrame, pd.DataFrame]:
     )
     logger.info(
         "  df_development: %d rows (2000-2021, labeled) | df_real_world: %d rows (2022-2023, unlabeled)",
-        len(df_development),
-        len(df_real_world),
+        len(df_development), len(df_real_world),
     )
 
     # --- Step 4: missing value imputation ---
     features_with_nan = df_development.columns[df_development.isnull().any()].tolist()
     if features_with_nan:
         logger.info("Step 4/4 — Imputing missing values in: %s", features_with_nan)
-        df_development = interpolate_with_trend_extrapolation(
-            df_development, features_with_nan
-        )
+        df_development = interpolate_with_trend_extrapolation(df_development, features_with_nan)
         remaining = df_development.isnull().sum()
         if remaining.any():
-            logger.warning(
-                "  Missing values remain after imputation:\n%s",
-                remaining[remaining > 0],
-            )
+            logger.warning("  Missing values remain after imputation:\n%s", remaining[remaining > 0])
         else:
             logger.info("  No missing values after imputation.")
     else:

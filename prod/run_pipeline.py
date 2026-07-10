@@ -1,22 +1,24 @@
 """
 Orchestrator: runs the full pipeline in order —
-Ingestion/Cleaning (01) -> EDA (02) -> Clustering validation (03) ->
-Training/Evaluation (04) -> Inference (Pred) -> Prediction plots (05).
+Ingestion/Cleaning (01) -> EDA (02) -> Training/Evaluation (03) ->
+Clustering validation (04) -> Temporal persistence check (05) ->
+Inference (Pred) -> Prediction plots (06).
 
 Each stage runs as an independent process (not an import), on purpose:
 that way a failure in one stage doesn't leave the interpreter in a
 half-built state for the next one, and each stage's log stays separate
 with its own exit code.
 
-Note the fix relative to the previous version of this script: "Pred"
-now runs *before* "05" — 05_visualize_predictions.py reads
-outputs/tables/predictions.csv, which only exists once predict.py has
-run. The old default order ran them the other way round.
+Stages 04 and 05 do not feed 03 or Pred — both are standalone
+analyses read alongside the main results, not inputs to them (see
+03_train.py's and 05_temporal_persistence_check.py's module docstrings
+for why they're kept separate on purpose). Their position in
+DEFAULT_ORDER is about narrative order, not a data dependency.
 
 Usage:
     python prod/run_pipeline.py            # every stage, in order
     python prod/run_pipeline.py --skip-01  # reuse existing data/processed/
-    python prod/run_pipeline.py --only 04  # training only (requires 01-03 already run)
+    python prod/run_pipeline.py --only 03  # training only (requires 01-02 already run)
 """
 
 import argparse
@@ -34,13 +36,14 @@ logger = logging.getLogger(__name__)
 STAGES = {
     "01": PROD_DIR / "01_data_pipeline.py",
     "02": PROD_DIR / "02_eda.py",
-    "03": PROD_DIR / "03_clustering.py",
-    "04": PROD_DIR / "04_train.py",
+    "03": PROD_DIR / "03_train.py",
+    "04": PROD_DIR / "04_clustering.py",
+    "05": PROD_DIR / "05_temporal_persistence_check.py",
     "Pred": PROD_DIR / "predict.py",
-    "05": PROD_DIR / "05_visualize_predictions.py",
+    "06": PROD_DIR / "06_visualize_predictions.py",
 }
 
-DEFAULT_ORDER = ["01", "02", "03", "04", "Pred", "05"]
+DEFAULT_ORDER = ["01", "02", "03", "04", "05", "Pred", "06"]
 
 
 def run_stage(stage_key: str):
@@ -65,7 +68,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--skip-01", action="store_true", help="Skip stage 01 (ingestion/cleaning)")
     parser.add_argument("--skip-02", action="store_true", help="Skip stage 02 (EDA)")
-    parser.add_argument("--skip-03", action="store_true", help="Skip stage 03 (clustering validation)")
     parser.add_argument("--only", choices=list(STAGES.keys()), help="Run only one specific stage")
     args = parser.parse_args()
 
@@ -74,7 +76,6 @@ if __name__ == "__main__":
     else:
         keys = [k for k in DEFAULT_ORDER if not (
             (k == "01" and args.skip_01) or
-            (k == "02" and args.skip_02) or
-            (k == "03" and args.skip_03)
+            (k == "02" and args.skip_02)
         )]
         run(keys)

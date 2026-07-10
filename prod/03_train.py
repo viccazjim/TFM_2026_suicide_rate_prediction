@@ -2,20 +2,41 @@
 03 — Model training and evaluation.
 
 Refactor of notebooks/03_models.ipynb into a runnable script. Trains
-all 6 regression models (Ridge, Lasso, SVR, Random Forest, XGBoost,
-CatBoost) under both split strategies (Option A — geographical, Option
-B — time-based), evaluates, saves result tables to outputs/tables/ and
-figures to outputs/figures/ (prefix "03_").
+the 6 panel regression models (Ridge, Lasso, SVR, Random Forest,
+XGBoost, CatBoost) under both split strategies (Option A —
+geographical, Option B — time-based), evaluates, saves result tables
+to outputs/tables/ and figures to outputs/figures/ (prefix "03_").
 
-In addition to the full comparison (same as the notebook), persists
-the chosen production model — CatBoost, Option B — together with its
-scaler, under outputs/models/, so prod/predict.py can use it without
+This is deliberately the ONLY place that answers the thesis's actual
+question — "can socioeconomic and mental-health determinants predict
+suicide rate?" — using only those determinants as predictors, nothing
+derived from the target's own history. Two related but distinct
+analyses live elsewhere on purpose, not folded in here:
+
+- `04_clustering.py` checks, descriptively, whether the a priori
+  EU_REGIONS grouping holds up in the data. It does not feed a feature
+  back into these models — an earlier version of this pipeline did
+  that, and it was reverted: even a leakage-safe cluster feature
+  changes what question the panel models are answering, and it's
+  cleaner to keep "what do these determinants predict" and "does this
+  grouping assumption hold" as separate, individually interpretable
+  results.
+- `05_temporal_persistence_check.py` asks a genuinely different
+  question — "how much of suicide rate is just its own persistence
+  year-to-year, independent of any determinant?" — using SARIMAX/
+  Prophet. It is explicitly a follow-up check on what this notebook's
+  results mean, not a replacement for them; see that script's module
+  docstring for why conflating the two would be misleading.
+
+In addition to the full comparison, persists the chosen production
+model — CatBoost, Option B — together with its scaler, under
+outputs/models/, so prod/predict.py can score new data without
 retraining.
 
 Usage:
     python prod/03_train.py
 
-Requires data/processed/df_development.csv to already exist and be
+Requires data/processed/df_development.parquet to already exist and be
 cleaned (run prod/01_data_pipeline.py and prod/02_eda.py first, or
 their notebook equivalents).
 """
@@ -25,8 +46,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
-
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # headless: this script only saves figures to disk, never displays them
 
 import numpy as np
 import pandas as pd
@@ -57,12 +77,10 @@ from src import (
     save_artifact,
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
-DEVELOPMENT_CSV_PATH = REPO_ROOT / "data" / "processed" / "df_development.csv"
+DEVELOPMENT_PATH = REPO_ROOT / "data" / "processed" / "df_development.parquet"
 FIGURES_DIR = REPO_ROOT / "outputs" / "figures"
 TABLES_DIR = REPO_ROOT / "outputs" / "tables"
 MODELS_DIR = REPO_ROOT / "outputs" / "models"
@@ -99,71 +117,40 @@ def _run_option(df_development, predictor_features, split_fn, split_args, cv, la
     df_train, df_test, df_val, *_ = split_fn(df_development, *split_args)
     logger.info(
         "Option %s — Train: %d rows | Test: %d rows | Val: %d rows",
-        label,
-        len(df_train),
-        len(df_test),
-        len(df_val),
+        label, len(df_train), len(df_test), len(df_val),
     )
 
-    fig = plot_correlation_heatmaps(
-        df_train, SOCIAL_ECONOMIC_FEATURES, HEALTH_RELATED_FEATURES
-    )
-    save_figure(
-        fig,
-        name=f"correlation_heatmaps_option_{label}",
-        prefix=FIG_PREFIX,
-        figures_dir=str(FIGURES_DIR),
-    )
+    fig = plot_correlation_heatmaps(df_train, SOCIAL_ECONOMIC_FEATURES, HEALTH_RELATED_FEATURES)
+    save_figure(fig, name=f"correlation_heatmaps_option_{label}", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
 
     scaler = RobustScaler()
     X_train = df_train[predictor_features].copy()
     X_test = df_test[predictor_features].copy()
     X_val = df_val[predictor_features].copy()
-    y_train, y_test, y_val = (
-        df_train[TARGET].copy(),
-        df_test[TARGET].copy(),
-        df_val[TARGET].copy(),
-    )
+    y_train, y_test, y_val = df_train[TARGET].copy(), df_test[TARGET].copy(), df_val[TARGET].copy()
 
-    X_train_scaled = pd.DataFrame(
-        scaler.fit_transform(X_train), columns=predictor_features, index=X_train.index
-    )
-    X_test_scaled = pd.DataFrame(
-        scaler.transform(X_test), columns=predictor_features, index=X_test.index
-    )
-    X_val_scaled = pd.DataFrame(
-        scaler.transform(X_val), columns=predictor_features, index=X_val.index
-    )
+    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=predictor_features, index=X_train.index)
+    X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=predictor_features, index=X_test.index)
+    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=predictor_features, index=X_val.index)
 
     models = make_models(random_state=42)
     trained = {}
     logger.info("Option %s — training %d models", label, len(models))
     for name, model in models.items():
         trained[name] = train_model(
-            name=name,
-            model=model,
-            param_grid=param_grids[name],
-            X_train=X_train_scaled,
-            y_train=y_train,
-            cv=cv,
+            name=name, model=model, param_grid=param_grids[name],
+            X_train=X_train_scaled, y_train=y_train, cv=cv,
         )
 
     eval_results = []
     for name in trained:
-        eval_results.append(
-            evaluate_model(trained[name], X_test_scaled, y_test, "Test")
-        )
+        eval_results.append(evaluate_model(trained[name], X_test_scaled, y_test, "Test"))
         eval_results.append(evaluate_model(trained[name], X_val_scaled, y_val, "Val"))
 
     return {
-        "df_train": df_train,
-        "df_test": df_test,
-        "df_val": df_val,
-        "trained": trained,
-        "eval": eval_results,
-        "X_val_scaled": X_val_scaled,
-        "y_val": y_val,
-        "scaler": scaler,
+        "df_train": df_train, "df_test": df_test, "df_val": df_val,
+        "trained": trained, "eval": eval_results,
+        "X_val_scaled": X_val_scaled, "y_val": y_val, "scaler": scaler,
     }
 
 
@@ -180,105 +167,54 @@ def run():
          "production_model_path", "production_scaler_path"}
     """
     np.random.seed(42)
-    df_development = pd.read_csv(DEVELOPMENT_CSV_PATH)
+    df_development = pd.read_parquet(DEVELOPMENT_PATH)
     predictor_features = build_predictor_list(df_development, ID_COLS, TARGET)
-    logger.info(
-        "df_development: %d rows | %d predictors",
-        df_development.shape[0],
-        len(predictor_features),
-    )
+    logger.info("df_development: %d rows | %d predictors", df_development.shape[0], len(predictor_features))
 
     result_A = _run_option(
-        df_development,
-        predictor_features,
-        geographical_split,
-        (EU_COUNTRIES_ISO,),
-        cv=5,
-        label="A",
+        df_development, predictor_features, geographical_split, (EU_COUNTRIES_ISO,), cv=5, label="A",
     )
     result_B = _run_option(
-        df_development,
-        predictor_features,
-        temporal_split,
-        (),
-        cv=TimeSeriesSplit(n_splits=5),
-        label="B",
+        df_development, predictor_features, temporal_split, (), cv=TimeSeriesSplit(n_splits=5), label="B",
     )
 
-    table_A_test = build_results_table(
-        result_A["eval"], result_A["trained"], "Test", "Option A"
-    )
+    table_A_test = build_results_table(result_A["eval"], result_A["trained"], "Test", "Option A")
     logger.info("\n%s", table_A_test.to_string())
-    table_A_val = build_results_table(
-        result_A["eval"], result_A["trained"], "Val", "Option A"
-    )
+    table_A_val = build_results_table(result_A["eval"], result_A["trained"], "Val", "Option A")
     logger.info("\n%s", table_A_val.to_string())
-    table_B_test = build_results_table(
-        result_B["eval"], result_B["trained"], "Test", "Option B"
-    )
+    table_B_test = build_results_table(result_B["eval"], result_B["trained"], "Test", "Option B")
     logger.info("\n%s", table_B_test.to_string())
-    table_B_val = build_results_table(
-        result_B["eval"], result_B["trained"], "Val", "Option B"
-    )
+    table_B_val = build_results_table(result_B["eval"], result_B["trained"], "Val", "Option B")
     logger.info("\n%s", table_B_val.to_string())
 
-    fig = plot_rmse_comparison(
-        table_A_test, table_A_val, "Option A — Geographical split"
-    )
-    save_figure(
-        fig,
-        name="rmse_comparison_option_A",
-        prefix=FIG_PREFIX,
-        figures_dir=str(FIGURES_DIR),
-    )
+    fig = plot_rmse_comparison(table_A_test, table_A_val, "Option A — Geographical split")
+    save_figure(fig, name="rmse_comparison_option_A", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
     fig = plot_rmse_comparison(table_B_test, table_B_val, "Option B — Time split")
-    save_figure(
-        fig,
-        name="rmse_comparison_option_B",
-        prefix=FIG_PREFIX,
-        figures_dir=str(FIGURES_DIR),
-    )
+    save_figure(fig, name="rmse_comparison_option_B", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
     fig = plot_r2_comparison(table_A_test, table_A_val, "Option A — Geographical split")
-    save_figure(
-        fig,
-        name="r2_comparison_option_A",
-        prefix=FIG_PREFIX,
-        figures_dir=str(FIGURES_DIR),
-    )
+    save_figure(fig, name="r2_comparison_option_A", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
     fig = plot_r2_comparison(table_B_test, table_B_val, "Option B — Time split")
-    save_figure(
-        fig,
-        name="r2_comparison_option_B",
-        prefix=FIG_PREFIX,
-        figures_dir=str(FIGURES_DIR),
-    )
+    save_figure(fig, name="r2_comparison_option_B", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
 
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
-    table_A_test.to_csv(TABLES_DIR / "test_geographical.csv", index=False)
-    table_A_val.to_csv(TABLES_DIR / "val_geographical.csv", index=False)
-    table_B_test.to_csv(TABLES_DIR / "test_temporal.csv", index=False)
-    table_B_val.to_csv(TABLES_DIR / "val_temporal.csv", index=False)
+    table_A_test.to_parquet(TABLES_DIR / "test_geographical.parquet", index=False)
+    table_A_val.to_parquet(TABLES_DIR / "val_geographical.parquet", index=False)
+    table_B_test.to_parquet(TABLES_DIR / "test_temporal.parquet", index=False)
+    table_B_val.to_parquet(TABLES_DIR / "val_temporal.parquet", index=False)
     logger.info("Result tables saved to %s", TABLES_DIR)
 
     # --- Persist the production model (CatBoost, Option B) ---
     production_model = result_B["trained"][PRODUCTION_MODEL_NAME]["best_estimator"]
     production_scaler = result_B["scaler"]
-    model_path = save_artifact(
-        production_model, str(MODELS_DIR / "catboost_option_b.joblib")
-    )
-    scaler_path = save_artifact(
-        production_scaler, str(MODELS_DIR / "scaler_option_b.joblib")
-    )
+    model_path = save_artifact(production_model, str(MODELS_DIR / "catboost_option_b.joblib"))
+    scaler_path = save_artifact(production_scaler, str(MODELS_DIR / "scaler_option_b.joblib"))
     logger.info("Production model saved: %s", model_path)
     logger.info("Production scaler saved: %s", scaler_path)
 
     return {
-        "table_A_test": table_A_test,
-        "table_A_val": table_A_val,
-        "table_B_test": table_B_test,
-        "table_B_val": table_B_val,
-        "production_model_path": model_path,
-        "production_scaler_path": scaler_path,
+        "table_A_test": table_A_test, "table_A_val": table_A_val,
+        "table_B_test": table_B_test, "table_B_val": table_B_val,
+        "production_model_path": model_path, "production_scaler_path": scaler_path,
     }
 
 

@@ -5,14 +5,14 @@ Refactor of notebooks/02_eda.ipynb into a runnable script. Generates
 all the exploratory-phase figures and tables (time evolution,
 region-level trends, feature distributions, IQR outliers, VIF
 multicollinearity check), saves figures to outputs/figures/ with the
-"02_" prefix, and overwrites data/processed/df_development.csv with
+"02_" prefix, and overwrites data/processed/df_development.parquet with
 the "Region" column added and "Eating disorders" dropped (high VIF).
 
 Usage:
     python prod/02_eda.py
 
 Requires prod/01_data_pipeline.py (or the equivalent notebook) to have
-run first — reads data/processed/df_development.csv.
+run first — reads data/processed/df_development.parquet.
 """
 
 import logging
@@ -60,7 +60,7 @@ FIG_PREFIX = "02_"
 
 def run() -> pd.DataFrame:
     """
-    Runs the full EDA and overwrites df_development.csv with the
+    Runs the full EDA and overwrites df_development.parquet with the
     resulting changes (Region added, Eating disorders dropped).
 
     Returns
