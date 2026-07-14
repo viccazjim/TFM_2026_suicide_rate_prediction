@@ -93,7 +93,9 @@ SPOTLIGHT_COUNTRIES = [("LTU", "Lithuania"), ("GRC", "Greece"), ("DEU", "Germany
 MODEL_A_NAME = "CatBoost"
 MODEL_B_NAME = "SARIMAX +1 exog"
 TEMPORAL_EXOG_FEATURE = "Alcohol use disorders"  # matches 05_temporal_persistence_check.py's choice
-TEMPORAL_ORDER = (1, 1, 0)
+TEMPORAL_ORDER = (1, 1, 1)  # see src/timeseries_models.py::train_evaluate_sarimax's docstring —
+# (1,1,0) was the original default; notebooks/05b_temporal_persistence_improvements.ipynb found
+# (1,1,1) beats it on both Test and Val R².
 
 
 def _forecast_temporal_model(df_history: pd.DataFrame, df_real_world: pd.DataFrame) -> pd.DataFrame:

@@ -115,6 +115,19 @@ def _run_option(df_development, predictor_features, split_fn, split_args, cv, la
         {"df_train", "df_test", "df_val", "trained", "eval", "X_val_scaled", "scaler"}
     """
     df_train, df_test, df_val, *_ = split_fn(df_development, *split_args)
+
+    if label == "B":
+        # TimeSeriesSplit assumes row order reflects chronological order — it
+        # splits by row *position*, not by the Year column's value. The panel
+        # as stored is grouped by country first and year second (all of AUT's
+        # rows, then all of BEL's, ...), so passing it through unsorted would
+        # silently turn "temporal" cross-validation into a de facto geographic
+        # one, split roughly by which countries happen to sort first. Year is
+        # the sort key that actually matters; Code is only a deterministic
+        # tie-breaker for rows sharing a year — there is no temporal order
+        # *within* a year, so which country comes first there doesn't matter.
+        df_train = df_train.sort_values(["Year", "Code"]).reset_index(drop=True)
+
     logger.info(
         "Option %s — Train: %d rows | Test: %d rows | Val: %d rows",
         label, len(df_train), len(df_test), len(df_val),
