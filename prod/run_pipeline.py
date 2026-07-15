@@ -30,7 +30,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROD_DIR = REPO_ROOT / "prod"
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 STAGES = {
@@ -53,7 +55,11 @@ def run_stage(stage_key: str):
     logger.info("=" * 60)
     result = subprocess.run([sys.executable, str(script_path)], cwd=str(REPO_ROOT))
     if result.returncode != 0:
-        logger.error("Stage %s failed (exit code %d) — stopping the pipeline.", stage_key, result.returncode)
+        logger.error(
+            "Stage %s failed (exit code %d) — stopping the pipeline.",
+            stage_key,
+            result.returncode,
+        )
         sys.exit(result.returncode)
     logger.info("Stage %s completed successfully.\n", stage_key)
 
@@ -65,17 +71,24 @@ def run(stage_keys):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--skip-01", action="store_true", help="Skip stage 01 (ingestion/cleaning)")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--skip-01", action="store_true", help="Skip stage 01 (ingestion/cleaning)"
+    )
     parser.add_argument("--skip-02", action="store_true", help="Skip stage 02 (EDA)")
-    parser.add_argument("--only", choices=list(STAGES.keys()), help="Run only one specific stage")
+    parser.add_argument(
+        "--only", choices=list(STAGES.keys()), help="Run only one specific stage"
+    )
     args = parser.parse_args()
 
     if args.only:
         run([args.only])
     else:
-        keys = [k for k in DEFAULT_ORDER if not (
-            (k == "01" and args.skip_01) or
-            (k == "02" and args.skip_02)
-        )]
+        keys = [
+            k
+            for k in DEFAULT_ORDER
+            if not ((k == "01" and args.skip_01) or (k == "02" and args.skip_02))
+        ]
         run(keys)
