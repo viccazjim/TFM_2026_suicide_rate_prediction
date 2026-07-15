@@ -39,6 +39,14 @@ points per country, more exogenous regressors were checked directly to
 overfit (17 regressors drives the AIC to an implausible -235 — more
 free parameters than observations).
 
+The SARIMAX order used below (src/timeseries_models.py's default,
+currently (1,1,1)) was not fixed upfront either: it started as (1,1,0),
+and only became (1,1,1) after
+notebooks/05b_temporal_persistence_improvements.ipynb tested it
+directly against four alternative orders and found the added MA(1)
+term improved both Test and Validation R² — see that notebook for the
+comparison this script doesn't re-derive.
+
 Option A only conceptually excluded here: a per-country time-series
 model cannot forecast a country with zero training history, which is
 exactly what Option A's test/val countries are. This script only ever

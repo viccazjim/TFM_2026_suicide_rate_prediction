@@ -9,8 +9,41 @@ import pandas as pd
 import pycountry
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+REQUEST_TIMEOUT = 30  # seconds — a hung connection with no timeout blocks forever
+
+
+def _build_session() -> requests.Session:
+    """
+    A requests.Session that retries transient failures — connection drops
+    (e.g. RemoteDisconnected), timeouts, and 5xx server errors — with
+    exponential backoff, instead of giving up after a single attempt.
+    World Bank's and WHO's public APIs are usable but not perfectly
+    reliable moment to moment, particularly from behind a corporate
+    network or proxy; a bare `requests.get()` with no retry turns any
+    one-off blip into a full pipeline failure. A custom User-Agent is set
+    too, since some hosts are pickier about the default one `requests`
+    sends.
+
+    Returns
+    -------
+    requests.Session
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=4,
+        backoff_factor=2,  # waits 2s, 4s, 8s, 16s between attempts
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+    )
+    session.mount("http://", HTTPAdapter(max_retries=retry))
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; TFM-suicide-rate-pipeline/1.0)"})
+    return session
 
 
 def country_code(geo_name: str) -> str | None:
@@ -84,13 +117,16 @@ def fetch_worldbank_indicators(
     Merges World Bank API indicators onto df_base, one indicator at a time
     (the World Bank API does not support multi-indicator requests).
 
-    Failure handling: if a single indicator's request fails (non-200
-    status) or returns no data, that indicator is skipped with a printed
-    warning — the function does not raise, and continues merging the
-    remaining indicators. This means the returned DataFrame can silently
-    be missing a column if that indicator's API call failed; check the
-    printed output or the resulting columns if you need to be sure all
-    indicators came through.
+    Failure handling: each indicator's request retries transient failures
+    (connection drops, timeouts, 5xx errors) automatically — see
+    _build_session(). If a single indicator's request still fails after
+    retries, or returns a non-200 status, or returns no data, that
+    indicator is skipped with a printed warning — the function does not
+    raise, and continues with the remaining indicators. This means the
+    returned DataFrame can silently be missing a column if that
+    indicator's API call failed even after retrying; check the printed
+    output or the resulting columns if you need to be sure all indicators
+    came through.
 
     Parameters
     ----------
@@ -117,15 +153,25 @@ def fetch_worldbank_indicators(
         adapted to the ones used elsewhere (indicator per 100,000 inhabitants - WHO/IHME).
     """
     df_features = df_base.copy()
+    session = _build_session()
 
     for code, column_name in indicators.items():
         url_wb = (
-            f"http://api.worldbank.org/v2/country/{region}/indicator/{code}"
+            f"https://api.worldbank.org/v2/country/{region}/indicator/{code}"
             f"?format=json&per_page=10000&date={date_range}"
         )
         # SSL verification disabled for local network compatibility.
         # Remove verify=False if running in a production or public environment.
-        response = requests.get(url_wb, verify=False)
+        # https:// used directly (not http://) to avoid a redirect hop —
+        # the plain-http endpoint 301-redirects here, and on some corporate
+        # networks/proxies that extra round-trip is exactly where a
+        # connection gets dropped (RemoteDisconnected) before the retry
+        # logic above even gets a chance to run.
+        try:
+            response = session.get(url_wb, verify=False, timeout=REQUEST_TIMEOUT)
+        except requests.exceptions.RequestException as e:
+            print(f"World Bank request failed for '{column_name}' after retries: {e}")
+            continue
 
         if response.status_code != 200:
             print(
@@ -187,12 +233,17 @@ def fetch_who_suicide_rates(indicator: str = "SDGSUICIDE") -> pd.DataFrame:
     Raises
     ------
     RuntimeError
-        If the HTTP request does not return status 200, or if it returns
-        200 but with an empty "value" list.
+        If the HTTP request does not return status 200 (even after
+        retrying transient failures — see _build_session()), or if it
+        returns 200 but with an empty "value" list.
     """
     url = f"https://ghoapi.azureedge.net/api/{indicator}"
     print("Downloading suicide rate dataset from the WHO API.")
-    response = requests.get(url, verify=False)
+    session = _build_session()
+    try:
+        response = session.get(url, verify=False, timeout=REQUEST_TIMEOUT)
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"WHO API request failed after retries: {e}") from e
 
     if response.status_code != 200:
         raise RuntimeError(
