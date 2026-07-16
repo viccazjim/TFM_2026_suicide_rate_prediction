@@ -28,6 +28,24 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 logger = logging.getLogger(__name__)
 
+# Prophet fits via cmdstanpy under the hood, which logs "Chain [1] start
+# processing" / "done processing" at INFO level for every single fit — with
+# one Prophet model per country (27 fits per run, more if both univariate
+# and +exog variants are evaluated), that's 50+ lines of noise per call with
+# no diagnostic value. A plain logging.getLogger("cmdstanpy").setLevel(...)
+# does NOT stick — cmdstanpy reconfigures its own logger's level on every
+# fit() call, silently undoing it — so propagation is disabled and a
+# NullHandler attached instead, which cmdstanpy's internal reconfiguration
+# does not touch. Set once here since train_evaluate_prophet() and
+# fit_prophet_models() are only ever reached through this module —
+# prod/05_temporal_persistence_check.py and its notebook counterpart both
+# import from here rather than calling cmdstanpy directly, so this covers both.
+for _noisy_logger_name in ("cmdstanpy", "prophet"):
+    _noisy_logger = logging.getLogger(_noisy_logger_name)
+    _noisy_logger.addHandler(logging.NullHandler())
+    _noisy_logger.propagate = False
+    _noisy_logger.setLevel(logging.WARNING)
+
 
 def _pooled_eval_dict(model_name: str, split: str, actuals, predictions) -> dict:
     """

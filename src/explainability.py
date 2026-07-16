@@ -135,6 +135,19 @@ def plot_shap_summary(shap_values, X_sample: pd.DataFrame, title: Optional[str] 
     """
     import matplotlib.pyplot as plt
 
+    # shap.summary_plot() doesn't create its own figure explicitly — it
+    # draws onto whatever plt.gcf() returns internally. If a previous
+    # plot's figure was never closed (e.g. plot_error_by_year(), called
+    # right before this in prod/03_train.py), shap.summary_plot() silently
+    # reuses that same stale figure and axes rather than a fresh one — the
+    # SHAP dots end up drawn over the old plot's leftover axis labels and
+    # tick positions instead of a clean canvas. Closing every open figure
+    # immediately before this call (not after — see below) guarantees
+    # there is nothing left for it to reuse, without touching the new
+    # figure this function itself returns, which needs to stay open for
+    # notebooks' automatic inline display to pick it up at the end of the
+    # cell that calls this function.
+    plt.close("all")
     shap.summary_plot(shap_values, X_sample, show=False)
     fig = plt.gcf()
     if title:
@@ -165,6 +178,12 @@ def plot_shap_waterfall(shap_values, index: int = 0, title: Optional[str] = None
     """
     import matplotlib.pyplot as plt
 
+    # Same reasoning as plot_shap_summary()'s fix: close any stale open
+    # figure right before shap.plots.waterfall() creates its own, so it
+    # cannot end up reusing leftover axes from whatever was plotted right
+    # before this — without closing the fresh figure this call produces,
+    # which needs to stay open for notebooks to display it inline.
+    plt.close("all")
     shap.plots.waterfall(shap_values[index], show=False)
     fig = plt.gcf()
     if title:
