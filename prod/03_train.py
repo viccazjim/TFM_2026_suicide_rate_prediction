@@ -70,9 +70,18 @@ from src import (
     train_model,
     evaluate_model,
     build_results_table,
+    get_eval_entry,
     plot_correlation_heatmaps,
     plot_rmse_comparison,
     plot_r2_comparison,
+    plot_actual_vs_predicted,
+    plot_residual_histogram,
+    plot_residuals_vs_predicted,
+    plot_error_by_year,
+    mean_absolute_error_by_country,
+    compute_shap_values,
+    plot_shap_summary,
+    plot_shap_waterfall,
     save_figure,
     save_artifact,
 )
@@ -215,6 +224,69 @@ def run():
     table_B_test.to_parquet(TABLES_DIR / "test_temporal.parquet", index=False)
     table_B_val.to_parquet(TABLES_DIR / "val_temporal.parquet", index=False)
     logger.info("Result tables saved to %s", TABLES_DIR)
+
+    # --- Result diagnostics and interpretability (Option B only, production
+    # model only) --- mirrors notebooks/03_models.ipynb's diagnostics section,
+    # which this script previously did not: it trained and evaluated all six
+    # models but only ever saved the six comparison figures, silently
+    # skipping the six diagnostic/SHAP figures Section 3.6.3 of the thesis
+    # describes and references by name. Anyone running this script alone
+    # (not the notebook) never got those six files, even though the write-up
+    # assumes they exist.
+    logger.info("Generating diagnostic and SHAP figures for %s (Option B, Validation)", PRODUCTION_MODEL_NAME)
+    test_entry = get_eval_entry(result_B["eval"], PRODUCTION_MODEL_NAME, "Test")
+    val_entry = get_eval_entry(result_B["eval"], PRODUCTION_MODEL_NAME, "Val")
+    logger.info(
+        "Diagnosing: %s | Option B — Test RMSE: %s | R²: %s | Val RMSE: %s | R²: %s",
+        PRODUCTION_MODEL_NAME, test_entry["rmse"], test_entry["r2"], val_entry["rmse"], val_entry["r2"],
+    )
+
+    fig = plot_actual_vs_predicted(
+        val_entry["actuals"], val_entry["predictions"],
+        title=f"{PRODUCTION_MODEL_NAME} — Actual vs Predicted (Option B, Validation)",
+    )
+    save_figure(fig, name="actual_vs_predicted_option_B", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+
+    fig = plot_residual_histogram(
+        val_entry["actuals"], val_entry["predictions"],
+        title=f"{PRODUCTION_MODEL_NAME} — Residual Distribution (Option B, Validation)",
+    )
+    save_figure(fig, name="residual_histogram_option_B", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+
+    fig = plot_residuals_vs_predicted(
+        val_entry["actuals"], val_entry["predictions"],
+        title=f"{PRODUCTION_MODEL_NAME} — Residuals vs Predicted (Option B, Validation)",
+    )
+    save_figure(fig, name="residuals_vs_predicted_option_B", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+
+    fig = plot_error_by_year(
+        result_B["df_val"][["Year"]].reset_index(drop=True),
+        val_entry["actuals"], val_entry["predictions"],
+        title=f"{PRODUCTION_MODEL_NAME} — Mean Absolute Error by Year (Option B, Validation)",
+    )
+    save_figure(fig, name="error_by_year_option_B", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+
+    error_by_country = mean_absolute_error_by_country(
+        result_B["df_val"][["Country"]].reset_index(drop=True),
+        val_entry["actuals"], val_entry["predictions"], top_n=10,
+    )
+    logger.info("Highest mean absolute error by country (Validation):\n%s", error_by_country.to_string())
+
+    explainer, shap_values, X_shap_sample = compute_shap_values(
+        result_B["trained"][PRODUCTION_MODEL_NAME]["best_estimator"],
+        result_B["X_val_scaled"], sample_size=500, random_state=42,
+    )
+    fig = plot_shap_summary(
+        shap_values, X_shap_sample,
+        title=f"{PRODUCTION_MODEL_NAME} — SHAP Summary (Option B, Validation sample)",
+    )
+    save_figure(fig, name="shap_summary_option_B", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+
+    fig = plot_shap_waterfall(
+        shap_values, index=0,
+        title=f"{PRODUCTION_MODEL_NAME} — SHAP Waterfall (single Validation prediction)",
+    )
+    save_figure(fig, name="shap_waterfall", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
 
     # --- Persist the production model (CatBoost, Option B) ---
     production_model = result_B["trained"][PRODUCTION_MODEL_NAME]["best_estimator"]

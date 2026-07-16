@@ -443,8 +443,16 @@ def plot_rmse_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, labe
         (the output of build_results_table(..., split_filter="Test", ...)).
     table_val : pd.DataFrame
         Val-set results, must contain columns "Model", "RMSE" (the output
-        of build_results_table(..., split_filter="Val", ...)). Must have
-        the same models in the same row order as table_test.
+        of build_results_table(..., split_filter="Val", ...)).
+        Does NOT need to share row order with table_test — build_results_table()
+        sorts each table independently by its own RMSE column, so the two
+        commonly disagree (whichever model is best on Test is not always
+        best on Val). An explicit merge on "Model" below is what makes
+        this safe; an earlier version of this function assumed matching
+        row order instead, which silently mislabelled bars whenever the
+        Test-best and Val-best model rankings differed — confirmed to
+        have actually happened for Option B (SVR/CatBoost swapped, and
+        Ridge/Lasso swapped) before this fix.
     label : str
         Chart title (e.g. "Option B — Time split").
 
@@ -452,22 +460,26 @@ def plot_rmse_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, labe
     -------
     matplotlib.figure.Figure
     """
+    merged = table_test[["Model", "CV RMSE", "RMSE"]].merge(
+        table_val[["Model", "RMSE"]], on="Model", suffixes=("_test", "_val")
+    )
+
     fig, ax = plt.subplots(figsize=(9, 6))
-    x = np.arange(len(table_test))
+    x = np.arange(len(merged))
     width = 0.25
 
     ax.bar(
         x - width,
-        table_test["CV RMSE"],
+        merged["CV RMSE"],
         width,
         label="CV RMSE",
         color="#55A868",
         alpha=0.85,
     )
-    ax.bar(x, table_test["RMSE"], width, label="Test RMSE", color="#4C72B0", alpha=0.85)
+    ax.bar(x, merged["RMSE_test"], width, label="Test RMSE", color="#4C72B0", alpha=0.85)
     ax.bar(
         x + width,
-        table_val["RMSE"],
+        merged["RMSE_val"],
         width,
         label="Val RMSE",
         color="#DD8452",
@@ -475,7 +487,7 @@ def plot_rmse_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, labe
     )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(table_test["Model"], rotation=20, ha="right", fontsize=10)
+    ax.set_xticklabels(merged["Model"], rotation=20, ha="right", fontsize=10)
     ax.set_ylabel("RMSE (suicide rate per 100,000 inhabitants)")
     ax.set_title(label, fontweight="bold")
     ax.legend()
@@ -494,8 +506,10 @@ def plot_r2_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, label:
     table_test : pd.DataFrame
         Test-set results, must contain columns "Model", "R²".
     table_val : pd.DataFrame
-        Val-set results, must contain columns "Model", "R²". Must have the
-        same models in the same row order as table_test.
+        Val-set results, must contain columns "Model", "R²".
+        Does NOT need to share row order with table_test — see
+        plot_rmse_comparison()'s docstring for why an explicit merge on
+        "Model" is required here rather than assuming matching row order.
     label : str
         Chart title (e.g. "Option B — Time split").
 
@@ -503,13 +517,17 @@ def plot_r2_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, label:
     -------
     matplotlib.figure.Figure
     """
+    merged = table_test[["Model", "R²"]].merge(
+        table_val[["Model", "R²"]], on="Model", suffixes=("_test", "_val")
+    )
+
     fig, ax = plt.subplots(figsize=(9, 6))
-    x = np.arange(len(table_test))
+    x = np.arange(len(merged))
     width = 0.3
 
     ax.bar(
         x - width / 2,
-        table_test["R²"],
+        merged["R²_test"],
         width,
         label="Test R²",
         color="#4C72B0",
@@ -517,7 +535,7 @@ def plot_r2_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, label:
     )
     ax.bar(
         x + width / 2,
-        table_val["R²"],
+        merged["R²_val"],
         width,
         label="Val R²",
         color="#DD8452",
@@ -526,7 +544,7 @@ def plot_r2_comparison(table_test: pd.DataFrame, table_val: pd.DataFrame, label:
 
     ax.axhline(y=0, color="black", linewidth=0.8, linestyle="--")
     ax.set_xticks(x)
-    ax.set_xticklabels(table_test["Model"], rotation=20, ha="right", fontsize=10)
+    ax.set_xticklabels(merged["Model"], rotation=20, ha="right", fontsize=10)
     ax.set_ylabel("R² score")
     ax.set_title(label, fontweight="bold")
     ax.legend()
