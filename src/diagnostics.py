@@ -8,6 +8,7 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 import os
+from typing import cast
 from scipy.cluster.hierarchy import dendrogram
 from sklearn.decomposition import PCA
 
@@ -140,7 +141,7 @@ def plot_suicide_trend_by_region(df: pd.DataFrame):
 
 
 def plot_suicide_trend_by_group(
-    df: pd.DataFrame, group_col: str, legend_title: str = None, title: str = None
+    df: pd.DataFrame, group_col: str, legend_title: str | None = None, title: str | None = None
 ):
     """
     Line plot of average suicide rate over time, one line per group —
@@ -212,8 +213,9 @@ def plot_suicide_boxplot_by_country(df: pd.DataFrame):
         hue="Code",
         legend=False,
         palette="vlag",
-        order=df.groupby("Code")["Suicide rate"]
-        .median()
+        order=cast(
+            pd.Series, df.groupby("Code")["Suicide rate"].median()
+        )
         .sort_values(ascending=False)
         .index,
     )
@@ -301,8 +303,9 @@ def plot_suicide_dispersion_stripplot(df: pd.DataFrame):
         y="Suicide rate",
         hue="Code",
         legend=False,
-        order=df.groupby("Code")["Suicide rate"]
-        .median()
+        order=cast(
+            pd.Series, df.groupby("Code")["Suicide rate"].median()
+        )
         .sort_values(ascending=False)
         .index,
         jitter=True,
@@ -351,7 +354,7 @@ def plot_correlation_heatmaps(
         [["top_left", "top_right"], ["bottom", "bottom"]], figsize=(25, 20)
     )
     sns.heatmap(
-        df_train[social_economic_features].corr(),
+        cast(pd.DataFrame, df_train[social_economic_features]).corr(),
         ax=axs["top_left"],
         annot=True,
         fmt=".2f",
@@ -366,7 +369,7 @@ def plot_correlation_heatmaps(
     )
 
     sns.heatmap(
-        df_train[health_related_features].corr(),
+        cast(pd.DataFrame, df_train[health_related_features]).corr(),
         ax=axs["top_right"],
         annot=True,
         fmt=".2f",
@@ -681,12 +684,12 @@ def plot_error_by_year(
     years = pd.DataFrame(df_years).reset_index(drop=True)["Year"].to_numpy()
     abs_error = np.abs(np.asarray(actual) - np.asarray(predicted))
 
-    error_by_year = (
+    error_by_year = cast(
+        pd.Series,
         pd.DataFrame({"Year": years, "Absolute Error": abs_error})
         .groupby("Year")["Absolute Error"]
-        .mean()
-        .sort_index()
-    )
+        .mean(),
+    ).sort_index()
 
     fig, ax = plt.subplots(figsize=(9, 4.5))
     ax.plot(
@@ -729,12 +732,12 @@ def mean_absolute_error_by_country(df_countries, actual, predicted, top_n=10):
     countries = pd.DataFrame(df_countries).reset_index(drop=True)["Country"].to_numpy()
     abs_error = np.abs(np.asarray(actual) - np.asarray(predicted))
 
-    error_by_country = (
+    error_by_country = cast(
+        pd.Series,
         pd.DataFrame({"Country": countries, "Absolute Error": abs_error})
         .groupby("Country")["Absolute Error"]
-        .mean()
-        .sort_values(ascending=False)
-    )
+        .mean(),
+    ).sort_values(ascending=False)
     return error_by_country.head(top_n)
 
 
@@ -1200,7 +1203,7 @@ def plot_kmeans_elbow_silhouette(sweep_df: pd.DataFrame):
 def plot_dendrogram(
     linkage_matrix,
     labels,
-    k: int = None,
+    k: int | None = None,
     title: str = "Hierarchical clustering — dendrogram",
 ):
     """

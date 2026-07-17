@@ -61,7 +61,7 @@ def _list_contents(directory: Path) -> list[Path]:
     return sorted(directory.rglob("*"), key=lambda p: len(p.parts), reverse=True)
 
 
-def preview(keep: set[str]) -> dict[str, list[Path]]:
+def preview(keep: "set[str] | frozenset[str]") -> dict[str, list[Path]]:
     """
     Builds the list of what would be deleted, without deleting anything.
 
@@ -86,7 +86,7 @@ def preview(keep: set[str]) -> dict[str, list[Path]]:
     return plan
 
 
-def clean(keep: set[str] = frozenset(), dry_run: bool = False) -> dict[str, int]:
+def clean(keep: "set[str] | frozenset[str]" = frozenset(), dry_run: bool = False) -> dict[str, int]:
     """
     Deletes the contents of every target directory not in `keep`.
 

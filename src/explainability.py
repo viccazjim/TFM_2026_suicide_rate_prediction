@@ -10,6 +10,7 @@ model predicts what it predicts, per feature.
 import numpy as np
 import pandas as pd
 import shap
+import warnings
 from typing import Optional
 
 TREE_MODEL_MODULES = ("sklearn.ensemble", "xgboost", "catboost")
@@ -131,7 +132,9 @@ def plot_shap_summary(shap_values, X_sample: pd.DataFrame, title: Optional[str] 
     import matplotlib.pyplot as plt
 
     plt.close("all")
-    shap.summary_plot(shap_values, X_sample, show=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        shap.summary_plot(shap_values, X_sample, show=False)
     fig = plt.gcf()
     if title:
         fig.axes[0].set_title(title, fontweight="bold")

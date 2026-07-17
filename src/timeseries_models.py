@@ -63,7 +63,7 @@ def train_evaluate_sarimax(
     df_test: pd.DataFrame,
     df_val: pd.DataFrame,
     target: str,
-    exog_features: list[str] = None,
+    exog_features: list[str] | None = None,
     id_col: str = "Code",
     year_col: str = "Year",
     order: tuple = (1, 1, 0),
@@ -106,15 +106,17 @@ def train_evaluate_sarimax(
         that country's own RMSE and a "converged" flag.
     """
     from statsmodels.tsa.statespace.sarimax import SARIMAX
+    from statsmodels.tsa.statespace.mlemodel import MLEResultsWrapper
+    from typing import cast
 
     test_preds, test_actuals = [], []
     val_preds, val_actuals = [], []
     per_country_rows = []
 
     for code in sorted(df_train[id_col].unique()):
-        train_c = df_train[df_train[id_col] == code].sort_values(year_col)
-        test_c = df_test[df_test[id_col] == code].sort_values(year_col)
-        val_c = df_val[df_val[id_col] == code].sort_values(year_col)
+        train_c = df_train.loc[df_train[id_col] == code].sort_values(year_col)
+        test_c = df_test.loc[df_test[id_col] == code].sort_values(year_col)
+        val_c = df_val.loc[df_val[id_col] == code].sort_values(year_col)
 
         y_train = train_c[target].to_numpy()
         exog_train = train_c[exog_features].to_numpy() if exog_features else None
@@ -122,13 +124,13 @@ def train_evaluate_sarimax(
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                model = SARIMAX(
+                model = cast(MLEResultsWrapper, SARIMAX(
                     y_train,
                     exog=exog_train,
                     order=order,
                     enforce_stationarity=False,
                     enforce_invertibility=False,
-                ).fit(disp=False)
+                ).fit(disp=False))
 
             exog_forecast = None
             if exog_features:
@@ -188,7 +190,7 @@ def train_evaluate_sarimax(
 def fit_sarimax_models(
     df_train: pd.DataFrame,
     target: str,
-    exog_features: list[str] = None,
+    exog_features: list[str] | None = None,
     id_col: str = "Code",
     year_col: str = "Year",
     order: tuple = (1, 1, 0),
@@ -222,7 +224,7 @@ def fit_sarimax_models(
 
     models = {}
     for code in sorted(df_train[id_col].unique()):
-        train_c = df_train[df_train[id_col] == code].sort_values(year_col)
+        train_c = df_train.loc[df_train[id_col] == code].sort_values(year_col)
         y_train = train_c[target].to_numpy()
         exog_train = train_c[exog_features].to_numpy() if exog_features else None
 
@@ -247,7 +249,7 @@ def forecast_sarimax(
     code: str,
     years_exog_df: pd.DataFrame,
     year_col: str = "Year",
-    exog_features: list[str] = None,
+    exog_features: list[str] | None = None,
 ) -> pd.Series:
     """
     Forecasts a contiguous block of years for one country using an
@@ -298,122 +300,12 @@ def forecast_sarimax(
     return pd.Series(np.asarray(forecast), index=years_exog_df[year_col].to_numpy())
 
 
-def fit_prophet_models(
-    df_train: pd.DataFrame,
-    target: str,
-    exog_features: list[str] = None,
-    id_col: str = "Code",
-    year_col: str = "Year",
-) -> dict:
-    """
-    Fits one Prophet model per country and returns them, without
-    forecasting or evaluating — used to persist production models for
-    predict.py, separate from train_evaluate_prophet()'s fit + forecast
-    + pooled-evaluation flow used to compare against the panel models.
-
-    Parameters
-    ----------
-    df_train : pd.DataFrame
-    target : str
-    exog_features : list[str], optional
-        Same overfitting caveat as train_evaluate_prophet() — default
-        None (univariate).
-    id_col : str, default "Code"
-    year_col : str, default "Year"
-
-    Returns
-    -------
-    dict[str, Prophet]
-        {country_code: fitted Prophet model}. Countries where fitting
-        failed are simply absent — check `set(df_train[id_col].unique())
-        - set(result.keys())` to see which, if any.
-    """
-    from prophet import Prophet
-
-    models = {}
-    for code in sorted(df_train[id_col].unique()):
-        train_c = df_train[df_train[id_col] == code].sort_values(year_col)
-        prophet_train = pd.DataFrame(
-            {
-                "ds": pd.to_datetime(train_c[year_col], format="%Y"),
-                "y": train_c[target].to_numpy(),
-            }
-        )
-        if exog_features:
-            for feat in exog_features:
-                prophet_train[feat] = train_c[feat].to_numpy()
-
-        try:
-            model = Prophet(
-                yearly_seasonality=False,
-                weekly_seasonality=False,
-                daily_seasonality=False,
-            )
-            if exog_features:
-                for feat in exog_features:
-                    model.add_regressor(feat)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                model.fit(prophet_train)
-            models[code] = model
-        except Exception as e:
-            logger.warning("Prophet failed to fit for %s: %s", code, e)
-
-    return models
-
-
-def forecast_prophet(
-    models: dict, code: str, years, exog_df: pd.DataFrame = None
-) -> np.ndarray:
-    """
-    Forecasts specific years for one country using an already-fitted
-    Prophet model from fit_prophet_models(). Works for years beyond
-    what the model was evaluated on — Prophet simply extends its
-    fitted trend — but forecast uncertainty grows the further out you
-    go, and nothing here warns you about that; treat forecasts far
-    past the training period with proportionally more caution.
-
-    Parameters
-    ----------
-    models : dict[str, Prophet]
-        Output of fit_prophet_models().
-    code : str
-        Country ISO code — must be a key in `models`.
-    years : array-like of int
-    exog_df : pd.DataFrame, optional
-        Required only if the model was fit with exog_features — must
-        have one row per year in `years`, with those exact columns.
-
-    Returns
-    -------
-    np.ndarray
-        Forecasted values, same order as `years`.
-
-    Raises
-    ------
-    KeyError
-        If `code` has no fitted model (e.g. it failed during fitting,
-        or was never a training country at all — see predict.py for
-        how the caller should handle this rather than letting it raise).
-    """
-    if code not in models:
-        raise KeyError(f"No fitted Prophet model for country '{code}'")
-
-    future_df = pd.DataFrame({"ds": pd.to_datetime(pd.Series(years), format="%Y")})
-    if exog_df is not None:
-        future_df = pd.concat(
-            [future_df.reset_index(drop=True), exog_df.reset_index(drop=True)], axis=1
-        )
-
-    return models[code].predict(future_df)["yhat"].to_numpy()
-
-
 def train_evaluate_prophet(
     df_train: pd.DataFrame,
     df_test: pd.DataFrame,
     df_val: pd.DataFrame,
     target: str,
-    exog_features: list[str] = None,
+    exog_features: list[str] | None = None,
     id_col: str = "Code",
     year_col: str = "Year",
 ):
@@ -449,9 +341,9 @@ def train_evaluate_prophet(
     per_country_rows = []
 
     for code in sorted(df_train[id_col].unique()):
-        train_c = df_train[df_train[id_col] == code].sort_values(year_col)
-        test_c = df_test[df_test[id_col] == code].sort_values(year_col)
-        val_c = df_val[df_val[id_col] == code].sort_values(year_col)
+        train_c = df_train.loc[df_train[id_col] == code].sort_values(year_col)
+        test_c = df_test.loc[df_test[id_col] == code].sort_values(year_col)
+        val_c = df_val.loc[df_val[id_col] == code].sort_values(year_col)
 
         prophet_train = pd.DataFrame(
             {
@@ -465,9 +357,9 @@ def train_evaluate_prophet(
 
         try:
             model = Prophet(
-                yearly_seasonality=False,
-                weekly_seasonality=False,
-                daily_seasonality=False,
+                yearly_seasonality=False,  # type: ignore[arg-type]  -- Prophet accepts bool at runtime; stub only declares str
+                weekly_seasonality=False,  # type: ignore[arg-type]
+                daily_seasonality=False,  # type: ignore[arg-type]
             )
             if exog_features:
                 for feat in exog_features:

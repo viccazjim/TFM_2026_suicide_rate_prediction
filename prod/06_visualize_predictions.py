@@ -133,9 +133,10 @@ def _forecast_temporal_model(
 
     rows = []
     for code, group in df_real_world.groupby("Code"):
+        code = str(code)
         if code not in models:
             continue
-        country_future = future_block[future_block["Code"] == code]
+        country_future = future_block.loc[future_block["Code"] == code]
         forecast = forecast_sarimax(
             models, code, country_future, exog_features=[TEMPORAL_EXOG_FEATURE]
         )
@@ -235,9 +236,9 @@ def run(predictions_path: Path):
         )
 
     # --- Region-level comparison. ---
-    df_history["Region"] = df_history["Code"].map(EU_REGIONS)
-    df_predictions_catboost["Region"] = df_predictions_catboost["Code"].map(EU_REGIONS)
-    df_predictions_temporal["Region"] = df_predictions_temporal["Code"].map(EU_REGIONS)
+    df_history["Region"] = df_history["Code"].map(EU_REGIONS)  # type: ignore[arg-type]
+    df_predictions_catboost["Region"] = df_predictions_catboost["Code"].map(EU_REGIONS)  # type: ignore[arg-type]
+    df_predictions_temporal["Region"] = df_predictions_temporal["Code"].map(EU_REGIONS)  # type: ignore[arg-type]
 
     for region_name in sorted(set(EU_REGIONS.values())):
         logger.info("Generating region-level trend comparison for %s", region_name)
