@@ -15,3 +15,7 @@ catboost_info/
 .DS_Store
 .vscode/
 .idea/
+
+# --- Word lock/autosave files ---
+~$*
+~WRL*.tmp

@@ -1,15 +1,5 @@
 # TODO
 
-Completion:
-
-- [x] Store graphs for thesis.
-- [x] Results summary with graphs.
-- [x] Model results reasoning.
-  - [x] Plots from Mario's notebook.
-
-Next steps:
-
-- [x] prod/ filling
-- [ ] Clustering (non-supervised).
+Future lines of work:
 - [ ] Neural network.
 - [ ] Data visualization.
