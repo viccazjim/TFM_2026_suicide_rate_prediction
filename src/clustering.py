@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from typing import cast
 from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import (
     adjusted_rand_score,
@@ -172,6 +173,32 @@ def run_hierarchical(X_scaled: pd.DataFrame, k: int, method: str = "ward"):
     linkage_matrix = linkage(X_scaled, method=method)
     labels = fcluster(linkage_matrix, t=k, criterion="maxclust")
     return linkage_matrix, labels
+
+
+def compute_pca_coords(X_scaled: pd.DataFrame, n_components: int = 2, random_state: int = 42):
+    """
+    Reduces the scaled country-level feature space to `n_components`
+    principal components — shared by plot_cluster_vs_region_pca() (this
+    module's only other PCA user) and src/export.py's Power BI table
+    builder, so the two never compute PCA on the same data differently.
+
+    Parameters
+    ----------
+    X_scaled : pd.DataFrame
+        Scaled country-level features, e.g. from aggregate_country_features()
+        followed by RobustScaler.
+    n_components : int, default 2
+    random_state : int, default 42
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        (coords, explained_variance_ratio). coords has shape
+        (n_rows, n_components), same row order as X_scaled.
+    """
+    pca = PCA(n_components=n_components, random_state=random_state)
+    coords = pca.fit_transform(X_scaled)
+    return coords, pca.explained_variance_ratio_
 
 
 def cluster_region_agreement(cluster_labels, region_labels) -> dict:

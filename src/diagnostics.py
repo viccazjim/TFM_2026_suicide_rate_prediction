@@ -10,7 +10,6 @@ import pandas as pd
 import os
 from typing import cast
 from scipy.cluster.hierarchy import dendrogram
-from sklearn.decomposition import PCA
 
 
 def save_figure(
@@ -1274,9 +1273,9 @@ def plot_cluster_vs_region_pca(
     -------
     matplotlib.figure.Figure
     """
-    pca = PCA(n_components=2, random_state=42)
-    coords = pca.fit_transform(X_scaled)
-    var_explained = pca.explained_variance_ratio_
+    from src.clustering import compute_pca_coords
+
+    coords, var_explained = compute_pca_coords(X_scaled, n_components=2, random_state=42)
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 6))
 

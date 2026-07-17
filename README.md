@@ -11,7 +11,7 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 │   └── processed/               # df_development.parquet, df_real_world.parquet
 ├── docs/
 │   ├── orientaciones_y_pautas.pdf   # Program guidelines for the TFM
-│   └── TFM_master.docx              # Thesis write-up (current draft)
+│   └── predictive_analysis_of_suicide_rates_2026_CV_CM_CL.docx   # Thesis write-up (current draft)
 ├── notebooks/                   # Exploratory track — mirrors prod/ 1:1
 │   ├── 01_data_loading_cleaning.ipynb
 │   ├── 02_eda.ipynb
@@ -21,10 +21,12 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 │   ├── 05_temporal_persistence_check.ipynb   # A second, different question — see below
 │   ├── 05b_temporal_persistence_improvements.ipynb  # Follow-up hypotheses on 05's SARIMAX/Prophet results
 │   └── 06_visualize_predictions.ipynb        # CatBoost vs best temporal model, country + region level
+│   └── 07_export_powerbi.ipynb               # Assembles the Power BI dashboard's data workbook
 ├── outputs/
 │   ├── figures/                 # All saved plots, prefixed by pipeline stage (02_/03_/04_/06_)
 │   ├── models/                  # Persisted production model, scaler, and SARIMAX+exog models (joblib)
-│   └── tables/                  # Result tables and predictions (Parquet)
+│   ├── tables/                  # Result tables and predictions (Parquet)
+│   └── powerbi/                 # TFM_PowerBI_data.xlsx — the dashboard's data workbook
 ├── prod/                        # Production track — modular scripts, no notebooks
 │   ├── 01_data_pipeline.py      # Ingestion + cleaning
 │   ├── 02_eda.py                # EDA (figures + VIF), cleans df_development and df_real_world
@@ -32,8 +34,9 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 │   ├── 04_clustering.py         # Descriptive clustering validation (standalone, not a model feature)
 │   ├── 05_temporal_persistence_check.py     # SARIMAX/Prophet vs a naive persistence baseline
 │   ├── 06_visualize_predictions.py          # Predictions comparison, country + EU-region level
+│   ├── 07_export_powerbi.py                 # Assembles the Power BI dashboard's data workbook (outputs/powerbi/)
 │   ├── predict.py               # Inference — scores new data with the persisted CatBoost model
-│   ├── run_pipeline.py          # Orchestrates 01 → 02 → 03 → 04 → 05 → predict → 06
+│   ├── run_pipeline.py          # Orchestrates 01 → 02 → 03 → 04 → 05 → predict → 06 → 07
 │   └── clean_outputs.py         # Deletes every pipeline-generated artifact if needed (data/processed, outputs/, catboost_info/)
 ├── src/                          # Shared logic — imported by both notebooks/ and prod/
 │   ├── config.py                 # Constants (country lists, feature lists, indicator codes)
@@ -41,12 +44,14 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 │   ├── features.py               # VIF, predictor list builder, IQR outlier flagging
 │   ├── splits.py                 # geographical_split(), temporal_split()
 │   ├── models.py                 # Panel model registry, hyperparameter grids, train/evaluate
-│   ├── clustering.py              # Descriptive clustering + leakage-safe cluster-as-feature (unused, see below)
+│   ├── clustering.py              # Descriptive clustering (K-Means, hierarchical, ARI/NMI, PCA coords)
 │   ├── timeseries_models.py       # Per-country SARIMAX / Prophet fit, forecast, evaluate
 │   ├── metrics.py                 # Result tables, get_eval_entry(), metrics_by_period()
 │   ├── diagnostics.py             # All plotting functions (EDA, results, predictions) + save_figure()
 │   ├── explainability.py          # SHAP-based model interpretation
-│   └── persistence.py             # save_artifact() / load_artifact() (joblib)
+│   ├── persistence.py             # save_artifact() / load_artifact() (joblib)
+│   └── export.py                  # Builds the Power BI dashboard's tables + writes the .xlsx
+
 ├── requirements.txt
 └── TODO.md
 ```
@@ -61,7 +66,7 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-[Seguro] `requirements.txt` is a full environment freeze, not a curated minimal list. The packages the pipeline actually imports: `numpy`, `pandas`, `pyarrow` (Parquet I/O), `scikit-learn`, `xgboost`, `catboost`, `statsmodels` (SARIMAX), `prophet`, `shap`, `joblib`, `scipy`, `pycountry`, `requests`, `matplotlib`, `seaborn`.
+`requirements.txt` is a full environment freeze, not a curated minimal list. The packages the pipeline actually imports: `numpy`, `pandas`, `pyarrow` (Parquet I/O), `scikit-learn`, `xgboost`, `catboost`, `statsmodels` (SARIMAX), `prophet`, `shap`, `joblib`, `scipy`, `pycountry`, `requests`, `matplotlib`, `seaborn`.
 
 ## Data sources
 
@@ -79,17 +84,19 @@ Both API-fetching functions (`fetch_worldbank_indicators`, `fetch_who_suicide_ra
 
 ### Option 1 — Notebooks (exploratory)
 
-Run `01` → `02` → `03` in order, each reading what the previous one wrote. `03b`, `04`, `05`, `05b`, `06` can run in any order after `03` (none of them feed back into it) — `06` additionally needs `predict.py`'s output, so run that first if working outside `run_pipeline.py`.
+Run `01` → `02` → `03` in order, each reading what the previous one wrote. `03b`, `04`, `05`, `05b`, `06` can run in any order after `03` (none of them feed back into it) — `06` additionally needs `predict.py`'s output, so run that first if working outside `run_pipeline.py`. `07` needs both `predict.py`'s and `06`'s saved predictions, so run it last.
 
 ### Option 2 — Production scripts
 
 ```bash
-python prod/run_pipeline.py                # full pipeline: 01 → 02 → 03 → 04 → 05 → predict → 06
+python prod/run_pipeline.py                # full pipeline: 01 → 02 → 03 → 04 → 05 → predict → 06 → 07
 python prod/run_pipeline.py --skip-01       # reuse existing data/processed/
 python prod/run_pipeline.py --only 03       # training only
 
 python prod/predict.py                      # score df_real_world.parquet with CatBoost
 python prod/predict.py --input custom.parquet --output custom_predictions.csv
+
+python prod/07_export_powerbi.py            # rebuild outputs/powerbi/TFM_PowerBI_data.xlsx alone
 
 python prod/clean_outputs.py                # wipe data/processed/, outputs/, catboost_info/ before a clean re-run
 python prod/clean_outputs.py --dry-run      # preview what would be deleted, without deleting
@@ -140,3 +147,7 @@ SARIMAX + exog scores higher than CatBoost on both Test and Validation. It is no
 ## Cluster-as-feature was tried and reverted
 
 An earlier version of the pipeline fed the country cluster from `04_clustering.py` back into `03_train.py` as a supervised-model feature (built in a leakage-safe way — no target information, fit on training data only). It was reverted after discussion: even done safely, it blurs together two results that are cleaner read separately (see "Two questions" above). The leakage-safe implementation was removed from `src/clustering.py` in a later cleanup pass rather than left in place unused — see git history if a future iteration wants to revisit the decision.
+
+## Power BI dashboard
+
+`prod/07_export_powerbi.py` (and its notebook counterpart) assembles `outputs/powerbi/TFM_PowerBI_data.xlsx` — seven flat, denormalised tables (country panel, predictions, SHAP importance, model comparison, cluster/PCA lookup, temporal persistence check, cluster/region agreement) meant to be connected directly via Power BI's "Get Data > Excel", one visual per table with no further transformation needed. `src/export.py` builds every table purely from artifacts the rest of the pipeline already produces — no new model is fit and no new result is computed there; see that module's docstring. `Code` is the join key between `Suicide_Rate_Panel`, `Predictions_2022_2023`, and `Cluster_PCA`.

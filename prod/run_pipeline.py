@@ -2,7 +2,7 @@
 Orchestrator: runs the full pipeline in order —
 Ingestion/Cleaning (01) -> EDA (02) -> Training/Evaluation (03) ->
 Clustering validation (04) -> Temporal persistence check (05) ->
-Inference (Pred) -> Prediction plots (06).
+Inference (Pred) -> Prediction plots (06) -> Power BI export (07).
 
 Each stage runs as an independent process (not an import), on purpose:
 that way a failure in one stage doesn't leave the interpreter in a
@@ -37,9 +37,10 @@ STAGES = {
     "05": PROD_DIR / "05_temporal_persistence_check.py",
     "Pred": PROD_DIR / "predict.py",
     "06": PROD_DIR / "06_visualize_predictions.py",
+    "07": PROD_DIR / "07_export_powerbi.py",
 }
 
-DEFAULT_ORDER = ["01", "02", "03", "04", "05", "Pred", "06"]
+DEFAULT_ORDER = ["01", "02", "03", "04", "05", "Pred", "06", "07"]
 
 
 def run_stage(stage_key: str):

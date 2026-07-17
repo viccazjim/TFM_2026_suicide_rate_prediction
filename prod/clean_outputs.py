@@ -9,6 +9,7 @@ Deletes the *contents* of:
     outputs/figures/    (every *_*.png saved by save_figure())
     outputs/tables/      (every result/prediction table, .parquet or .csv)
     outputs/models/      (every persisted model/scaler, .joblib)
+    outputs/powerbi/      (every PowerBI artifact, .pbix or .csv)
     catboost_info/        (CatBoost's own training-log directory, recreated
                             every run regardless of whether this script deletes it)
 
@@ -26,7 +27,7 @@ Usage:
     python prod/clean_outputs.py --dry-run     # lists what would be deleted, deletes nothing
 
     # Keep specific directories untouched:
-    python prod/clean_outputs.py --keep-data --keep-models
+    python prod/clean_outputs.py --keep-data --keep-models --keep-powerbi
 """
 
 import argparse
@@ -48,6 +49,7 @@ TARGETS = {
     "figures": REPO_ROOT / "outputs" / "figures",
     "tables": REPO_ROOT / "outputs" / "tables",
     "models": REPO_ROOT / "outputs" / "models",
+    "powerbi": REPO_ROOT / "outputs" / "powerbi",
 }
 CATBOOST_INFO_DIR = REPO_ROOT / "catboost_info"
 
@@ -86,7 +88,9 @@ def preview(keep: "set[str] | frozenset[str]") -> dict[str, list[Path]]:
     return plan
 
 
-def clean(keep: "set[str] | frozenset[str]" = frozenset(), dry_run: bool = False) -> dict[str, int]:
+def clean(
+    keep: "set[str] | frozenset[str]" = frozenset(), dry_run: bool = False
+) -> dict[str, int]:
     """
     Deletes the contents of every target directory not in `keep`.
 
@@ -166,6 +170,9 @@ if __name__ == "__main__":
         "--keep-models", action="store_true", help="Don't touch outputs/models/"
     )
     parser.add_argument(
+        "--keep-powerbi", action="store_true", help="Don't touch outputs/powerbi/"
+    )
+    parser.add_argument(
         "--keep-catboost-info", action="store_true", help="Don't touch catboost_info/"
     )
     args = parser.parse_args()
@@ -179,6 +186,8 @@ if __name__ == "__main__":
         keep.add("tables")
     if args.keep_models:
         keep.add("models")
+    if args.keep_powerbi:
+        keep.add("powerbi")
     if args.keep_catboost_info:
         keep.add("catboost_info")
 
