@@ -2,7 +2,7 @@
 Model/scaler persistence (joblib).
 
 Separated from models.py: that module builds and evaluates estimators
-in-memory for comparison purposes; this one is what makes a trained
+in-memory for comparison purposes; this one makes a trained
 estimator usable outside the process that trained it.
 """
 

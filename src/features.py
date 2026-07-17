@@ -92,8 +92,7 @@ def flag_outliers_iqr(
 ) -> pd.DataFrame:
     """
     Flags rows as outliers using the IQR method for each of the given
-    columns, independently per column (a row can be an outlier on one
-    column and not another — returns per-feature counts).
+    columns, independently per column.
 
     Parameters
     ----------

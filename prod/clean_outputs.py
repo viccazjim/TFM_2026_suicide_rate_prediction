@@ -1,7 +1,7 @@
 """
 Cleanup utility: deletes every artifact the pipeline generates, so the next
-run of prod/run_pipeline.py (or the notebooks) starts from a clean slate and
-nothing stale from a previous version of the code lingers around looking
+run of prod/run_pipeline.py (or the notebooks) starts from a clean state and
+nothing stale from a previous version of the code stays around looking
 like it came from the current one.
 
 Deletes the *contents* of:
@@ -38,7 +38,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 TARGETS = {
@@ -110,7 +112,11 @@ def clean(keep: set[str] = frozenset(), dry_run: bool = False) -> dict[str, int]
             continue
 
         if name == "catboost_info":
-            logger.info("%s %s", "[dry-run] Would remove" if dry_run else "Removing", CATBOOST_INFO_DIR)
+            logger.info(
+                "%s %s",
+                "[dry-run] Would remove" if dry_run else "Removing",
+                CATBOOST_INFO_DIR,
+            )
             if not dry_run:
                 shutil.rmtree(CATBOOST_INFO_DIR)
             counts[name] = 1
@@ -119,7 +125,9 @@ def clean(keep: set[str] = frozenset(), dry_run: bool = False) -> dict[str, int]
         directory = TARGETS[name]
         logger.info(
             "%s %d item(s) from %s",
-            "[dry-run] Would remove" if dry_run else "Removing", len(items), directory,
+            "[dry-run] Would remove" if dry_run else "Removing",
+            len(items),
+            directory,
         )
         for item in items:
             if dry_run:
@@ -134,14 +142,32 @@ def clean(keep: set[str] = frozenset(), dry_run: bool = False) -> dict[str, int]
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--yes", "-y", action="store_true", help="Skip the confirmation prompt")
-    parser.add_argument("--dry-run", action="store_true", help="List what would be deleted, delete nothing")
-    parser.add_argument("--keep-data", action="store_true", help="Don't touch data/processed/")
-    parser.add_argument("--keep-figures", action="store_true", help="Don't touch outputs/figures/")
-    parser.add_argument("--keep-tables", action="store_true", help="Don't touch outputs/tables/")
-    parser.add_argument("--keep-models", action="store_true", help="Don't touch outputs/models/")
-    parser.add_argument("--keep-catboost-info", action="store_true", help="Don't touch catboost_info/")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--yes", "-y", action="store_true", help="Skip the confirmation prompt"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List what would be deleted, delete nothing",
+    )
+    parser.add_argument(
+        "--keep-data", action="store_true", help="Don't touch data/processed/"
+    )
+    parser.add_argument(
+        "--keep-figures", action="store_true", help="Don't touch outputs/figures/"
+    )
+    parser.add_argument(
+        "--keep-tables", action="store_true", help="Don't touch outputs/tables/"
+    )
+    parser.add_argument(
+        "--keep-models", action="store_true", help="Don't touch outputs/models/"
+    )
+    parser.add_argument(
+        "--keep-catboost-info", action="store_true", help="Don't touch catboost_info/"
+    )
     args = parser.parse_args()
 
     keep = set()
@@ -172,7 +198,9 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if not args.yes:
-        answer = input(f"\nDelete {total} item(s) across {len([k for k, v in plan.items() if v])} director{'y' if len([k for k, v in plan.items() if v]) == 1 else 'ies'}? [y/N] ")
+        answer = input(
+            f"\nDelete {total} item(s) across {len([k for k, v in plan.items() if v])} director{'y' if len([k for k, v in plan.items() if v]) == 1 else 'ies'}? [y/N] "
+        )
         if answer.strip().lower() not in ("y", "yes"):
             logger.info("Aborted — nothing was deleted.")
             sys.exit(0)

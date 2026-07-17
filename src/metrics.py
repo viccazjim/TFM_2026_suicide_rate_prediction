@@ -96,9 +96,7 @@ def metrics_by_period(actual, predicted, years, periods: dict):
     """
     Computes RMSE/MAE/R² separately for named year sub-periods within one
     evaluation split — e.g. splitting Option B's Validation years into
-    "Pre-COVID" (2018-2019) and "COVID" (2020-2021) to check whether
-    degradation is concentrated in a specific period rather than being
-    generic time-distance decay.
+    "Pre-COVID" (2018-2019) and "COVID" (2020-2021).
 
     Parameters
     ----------

@@ -1,7 +1,7 @@
 """
 Data loading and cleaning: IHME (local CSV), World Bank (API), WHO (API).
 
-No modelling decisions set here — this module produces df_development / df_real_world.
+This module produces df_development / df_real_world.
 """
 
 import numpy as np
@@ -42,7 +42,9 @@ def _build_session() -> requests.Session:
     )
     session.mount("http://", HTTPAdapter(max_retries=retry))
     session.mount("https://", HTTPAdapter(max_retries=retry))
-    session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; TFM-suicide-rate-pipeline/1.0)"})
+    session.headers.update(
+        {"User-Agent": "Mozilla/5.0 (compatible; TFM-suicide-rate-pipeline/1.0)"}
+    )
     return session
 
 
@@ -162,11 +164,6 @@ def fetch_worldbank_indicators(
         )
         # SSL verification disabled for local network compatibility.
         # Remove verify=False if running in a production or public environment.
-        # https:// used directly (not http://) to avoid a redirect hop —
-        # the plain-http endpoint 301-redirects here, and on some corporate
-        # networks/proxies that extra round-trip is exactly where a
-        # connection gets dropped (RemoteDisconnected) before the retry
-        # logic above even gets a chance to run.
         try:
             response = session.get(url_wb, verify=False, timeout=REQUEST_TIMEOUT)
         except requests.exceptions.RequestException as e:

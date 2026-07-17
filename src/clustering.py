@@ -3,16 +3,6 @@ Unsupervised clustering — validates (or refutes) the a priori EU_REGIONS
 grouping used for descriptive purposes in 02_eda.py, and provides a
 standalone unsupervised analysis of the 27 EU countries.
 
-Also provides a leakage-safe path to use country clusters as a
-*supervised* feature (fit_country_clusters / assign_country_clusters /
-add_cluster_feature) — separate from the descriptive functions above,
-because the two uses have opposite requirements: the descriptive
-analysis wants the target's own trend included (that's the whole
-point — validating regions against actual suicide-rate behaviour); a
-feature fed into a model that predicts that same target must never
-include target-derived information, or the model would be predicting
-the target partly from itself.
-
 Kept separate from models.py: that module is about supervised
 prediction of the target; the descriptive half of this one never
 touches "Suicide rate" as something to predict — only as one more
@@ -24,7 +14,11 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import RobustScaler
-from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, silhouette_score
+from sklearn.metrics import (
+    adjusted_rand_score,
+    normalized_mutual_info_score,
+    silhouette_score,
+)
 from scipy.cluster.hierarchy import linkage, fcluster
 
 
@@ -57,7 +51,7 @@ def aggregate_country_features(
     target : str, optional
         Column to additionally compute mean and trend for. Pass a
         column name (e.g. "Suicide rate") for descriptive/validation
-        use (see 03_clustering.py). Leave as None when the result will
+        use. Leave as None when the result will
         be used as a supervised-model feature — including the target
         here would leak target information into its own predictor.
     year_col : str, default "Year"
@@ -95,7 +89,9 @@ def aggregate_country_features(
     return result
 
 
-def sweep_kmeans(X_scaled: pd.DataFrame, k_range=range(2, 9), random_state: int = 42) -> pd.DataFrame:
+def sweep_kmeans(
+    X_scaled: pd.DataFrame, k_range=range(2, 9), random_state: int = 42
+) -> pd.DataFrame:
     """
     Fits K-Means for each k in k_range and records inertia (for the
     elbow method) and silhouette score (higher is better, range -1 to 1)
@@ -120,11 +116,13 @@ def sweep_kmeans(X_scaled: pd.DataFrame, k_range=range(2, 9), random_state: int 
     for k in k_range:
         km = KMeans(n_clusters=k, random_state=random_state, n_init=10)
         labels = km.fit_predict(X_scaled)
-        rows.append({
-            "k": k,
-            "inertia": km.inertia_,
-            "silhouette": silhouette_score(X_scaled, labels),
-        })
+        rows.append(
+            {
+                "k": k,
+                "inertia": km.inertia_,
+                "silhouette": silhouette_score(X_scaled, labels),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -248,7 +246,9 @@ def fit_country_clusters(
          and KMeans expect, in order}. Pass this whole dict straight
          into assign_country_clusters().
     """
-    train_agg = aggregate_country_features(df_train, predictor_features, target=None, id_col=id_col)
+    train_agg = aggregate_country_features(
+        df_train, predictor_features, target=None, id_col=id_col
+    )
     feature_cols = [c for c in train_agg.columns if c != id_col]
 
     scaler = RobustScaler().fit(train_agg[feature_cols])

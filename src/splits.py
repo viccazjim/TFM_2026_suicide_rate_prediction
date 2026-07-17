@@ -1,5 +1,5 @@
 """
-Train / test / validation splitting strategies.
+Train / test / validation splitting strategies for the dataset.
 
 """
 

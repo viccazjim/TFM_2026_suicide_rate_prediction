@@ -95,7 +95,7 @@ HEALTH_RELATED_FEATURES = [
 ID_COLS = ["Country", "Code", "Year", "Region"]
 TARGET = "Suicide rate"
 
-# World Bank indicator codes -> readable column names
+# World Bank indicator codes: readable column names
 WORLD_BANK_INDICATORS = {
     "NY.GDP.PCAP.CD": "GDP per capita",
     "SL.UEM.TOTL.ZS": "Unemployment rate (%)",

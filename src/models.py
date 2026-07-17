@@ -114,7 +114,7 @@ def train_model(name, model, param_grid, X_train, y_train, cv):
         {
           "name": str,
           "best_estimator": fitted sklearn estimator (refit on full X_train/y_train
-                             with the best params found),
+                             with the best params),
           "best_params": dict,
           "cv_rmse": float (mean RMSE across CV folds, at the best params),
           "time_s": float (wall-clock seconds for the GridSearchCV.fit call),

@@ -9,7 +9,6 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 ├── data/
 │   ├── raw/                    # IHME source CSV (external input, not generated)
 │   └── processed/               # df_development.parquet, df_real_world.parquet
-├── deprecated/                  # Superseded files (old monolithic EDA.ipynb, earlier docx drafts)
 ├── docs/
 │   ├── orientaciones_y_pautas.pdf   # Program guidelines for the TFM
 │   └── TFM_master.docx              # Thesis write-up (current draft)
@@ -48,7 +47,6 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 │   ├── diagnostics.py             # All plotting functions (EDA, results, predictions) + save_figure()
 │   ├── explainability.py          # SHAP-based model interpretation
 │   └── persistence.py             # save_artifact() / load_artifact() (joblib)
-├── temp/                          # Working files under active review — not part of the pipeline
 ├── requirements.txt
 └── TODO.md
 ```

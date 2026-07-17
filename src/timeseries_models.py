@@ -28,18 +28,6 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 logger = logging.getLogger(__name__)
 
-# Prophet fits via cmdstanpy under the hood, which logs "Chain [1] start
-# processing" / "done processing" at INFO level for every single fit — with
-# one Prophet model per country (27 fits per run, more if both univariate
-# and +exog variants are evaluated), that's 50+ lines of noise per call with
-# no diagnostic value. A plain logging.getLogger("cmdstanpy").setLevel(...)
-# does NOT stick — cmdstanpy reconfigures its own logger's level on every
-# fit() call, silently undoing it — so propagation is disabled and a
-# NullHandler attached instead, which cmdstanpy's internal reconfiguration
-# does not touch. Set once here since train_evaluate_prophet() and
-# fit_prophet_models() are only ever reached through this module —
-# prod/05_temporal_persistence_check.py and its notebook counterpart both
-# import from here rather than calling cmdstanpy directly, so this covers both.
 for _noisy_logger_name in ("cmdstanpy", "prophet"):
     _noisy_logger = logging.getLogger(_noisy_logger_name)
     _noisy_logger.addHandler(logging.NullHandler())
@@ -135,30 +123,60 @@ def train_evaluate_sarimax(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 model = SARIMAX(
-                    y_train, exog=exog_train, order=order,
-                    enforce_stationarity=False, enforce_invertibility=False,
+                    y_train,
+                    exog=exog_train,
+                    order=order,
+                    enforce_stationarity=False,
+                    enforce_invertibility=False,
                 ).fit(disp=False)
 
             exog_forecast = None
             if exog_features:
                 exog_forecast = pd.concat([test_c, val_c])[exog_features].to_numpy()
-            forecast = np.asarray(model.forecast(steps=len(test_c) + len(val_c), exog=exog_forecast))
+            forecast = np.asarray(
+                model.forecast(steps=len(test_c) + len(val_c), exog=exog_forecast)
+            )
 
-            test_forecast, val_forecast = forecast[:len(test_c)], forecast[len(test_c):]
+            test_forecast, val_forecast = (
+                forecast[: len(test_c)],
+                forecast[len(test_c) :],
+            )
 
         except Exception as e:
             logger.warning("SARIMAX failed to converge for %s: %s", code, e)
             for split_name in ("Test", "Val"):
-                per_country_rows.append({"Code": code, "Split": split_name, "RMSE": float("nan"), "converged": False})
+                per_country_rows.append(
+                    {
+                        "Code": code,
+                        "Split": split_name,
+                        "RMSE": float("nan"),
+                        "converged": False,
+                    }
+                )
             continue
 
-        test_preds.extend(test_forecast); test_actuals.extend(test_c[target].to_numpy())
-        val_preds.extend(val_forecast); val_actuals.extend(val_c[target].to_numpy())
+        test_preds.extend(test_forecast)
+        test_actuals.extend(test_c[target].to_numpy())
+        val_preds.extend(val_forecast)
+        val_actuals.extend(val_c[target].to_numpy())
 
-        for split_name, actual, pred in [("Test", test_c[target].to_numpy(), test_forecast),
-                                          ("Val", val_c[target].to_numpy(), val_forecast)]:
-            rmse = float(np.sqrt(np.mean((actual - pred) ** 2))) if len(actual) else float("nan")
-            per_country_rows.append({"Code": code, "Split": split_name, "RMSE": round(rmse, 4), "converged": True})
+        for split_name, actual, pred in [
+            ("Test", test_c[target].to_numpy(), test_forecast),
+            ("Val", val_c[target].to_numpy(), val_forecast),
+        ]:
+            rmse = (
+                float(np.sqrt(np.mean((actual - pred) ** 2)))
+                if len(actual)
+                else float("nan")
+            )
+            per_country_rows.append(
+                {
+                    "Code": code,
+                    "Split": split_name,
+                    "RMSE": round(rmse, 4),
+                    "converged": True,
+                }
+            )
 
     eval_results = [
         _pooled_eval_dict("SARIMAX", "Test", test_actuals, test_preds),
@@ -212,8 +230,11 @@ def fit_sarimax_models(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 models[code] = SARIMAX(
-                    y_train, exog=exog_train, order=order,
-                    enforce_stationarity=False, enforce_invertibility=False,
+                    y_train,
+                    exog=exog_train,
+                    order=order,
+                    enforce_stationarity=False,
+                    enforce_invertibility=False,
                 ).fit(disp=False)
         except Exception as e:
             logger.warning("SARIMAX failed to fit for %s: %s", code, e)
@@ -221,13 +242,18 @@ def fit_sarimax_models(
     return models
 
 
-def forecast_sarimax(models: dict, code: str, years_exog_df: pd.DataFrame, year_col: str = "Year",
-                      exog_features: list[str] = None) -> pd.Series:
+def forecast_sarimax(
+    models: dict,
+    code: str,
+    years_exog_df: pd.DataFrame,
+    year_col: str = "Year",
+    exog_features: list[str] = None,
+) -> pd.Series:
     """
     Forecasts a contiguous block of years for one country using an
     already-fitted SARIMAX from fit_sarimax_models().
 
-    Unlike Prophet, SARIMAX's `.forecast()` walks forward step by step
+    SARIMAX's `.forecast()` walks forward step by step
     from the end of its training data — to reach a year far past
     training (e.g. df_real_world's 2022-2023, when the model was fit
     through ~2014), you must forecast *every* intervening year in
@@ -276,7 +302,6 @@ def fit_prophet_models(
     df_train: pd.DataFrame,
     target: str,
     exog_features: list[str] = None,
-
     id_col: str = "Code",
     year_col: str = "Year",
 ) -> dict:
@@ -308,16 +333,22 @@ def fit_prophet_models(
     models = {}
     for code in sorted(df_train[id_col].unique()):
         train_c = df_train[df_train[id_col] == code].sort_values(year_col)
-        prophet_train = pd.DataFrame({
-            "ds": pd.to_datetime(train_c[year_col], format="%Y"),
-            "y": train_c[target].to_numpy(),
-        })
+        prophet_train = pd.DataFrame(
+            {
+                "ds": pd.to_datetime(train_c[year_col], format="%Y"),
+                "y": train_c[target].to_numpy(),
+            }
+        )
         if exog_features:
             for feat in exog_features:
                 prophet_train[feat] = train_c[feat].to_numpy()
 
         try:
-            model = Prophet(yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=False)
+            model = Prophet(
+                yearly_seasonality=False,
+                weekly_seasonality=False,
+                daily_seasonality=False,
+            )
             if exog_features:
                 for feat in exog_features:
                     model.add_regressor(feat)
@@ -331,7 +362,9 @@ def fit_prophet_models(
     return models
 
 
-def forecast_prophet(models: dict, code: str, years, exog_df: pd.DataFrame = None) -> np.ndarray:
+def forecast_prophet(
+    models: dict, code: str, years, exog_df: pd.DataFrame = None
+) -> np.ndarray:
     """
     Forecasts specific years for one country using an already-fitted
     Prophet model from fit_prophet_models(). Works for years beyond
@@ -368,7 +401,9 @@ def forecast_prophet(models: dict, code: str, years, exog_df: pd.DataFrame = Non
 
     future_df = pd.DataFrame({"ds": pd.to_datetime(pd.Series(years), format="%Y")})
     if exog_df is not None:
-        future_df = pd.concat([future_df.reset_index(drop=True), exog_df.reset_index(drop=True)], axis=1)
+        future_df = pd.concat(
+            [future_df.reset_index(drop=True), exog_df.reset_index(drop=True)], axis=1
+        )
 
     return models[code].predict(future_df)["yhat"].to_numpy()
 
@@ -418,16 +453,22 @@ def train_evaluate_prophet(
         test_c = df_test[df_test[id_col] == code].sort_values(year_col)
         val_c = df_val[df_val[id_col] == code].sort_values(year_col)
 
-        prophet_train = pd.DataFrame({
-            "ds": pd.to_datetime(train_c[year_col], format="%Y"),
-            "y": train_c[target].to_numpy(),
-        })
+        prophet_train = pd.DataFrame(
+            {
+                "ds": pd.to_datetime(train_c[year_col], format="%Y"),
+                "y": train_c[target].to_numpy(),
+            }
+        )
         if exog_features:
             for feat in exog_features:
                 prophet_train[feat] = train_c[feat].to_numpy()
 
         try:
-            model = Prophet(yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=False)
+            model = Prophet(
+                yearly_seasonality=False,
+                weekly_seasonality=False,
+                daily_seasonality=False,
+            )
             if exog_features:
                 for feat in exog_features:
                     model.add_regressor(feat)
@@ -437,27 +478,54 @@ def train_evaluate_prophet(
                 model.fit(prophet_train)
 
             future_c = pd.concat([test_c, val_c]).sort_values(year_col)
-            future_df = pd.DataFrame({"ds": pd.to_datetime(future_c[year_col], format="%Y")})
+            future_df = pd.DataFrame(
+                {"ds": pd.to_datetime(future_c[year_col], format="%Y")}
+            )
             if exog_features:
                 for feat in exog_features:
                     future_df[feat] = future_c[feat].to_numpy()
 
             forecast = model.predict(future_df)["yhat"].to_numpy()
-            test_forecast, val_forecast = forecast[:len(test_c)], forecast[len(test_c):]
+            test_forecast, val_forecast = (
+                forecast[: len(test_c)],
+                forecast[len(test_c) :],
+            )
 
         except Exception as e:
             logger.warning("Prophet failed to converge for %s: %s", code, e)
             for split_name in ("Test", "Val"):
-                per_country_rows.append({"Code": code, "Split": split_name, "RMSE": float("nan"), "converged": False})
+                per_country_rows.append(
+                    {
+                        "Code": code,
+                        "Split": split_name,
+                        "RMSE": float("nan"),
+                        "converged": False,
+                    }
+                )
             continue
 
-        test_preds.extend(test_forecast); test_actuals.extend(test_c[target].to_numpy())
-        val_preds.extend(val_forecast); val_actuals.extend(val_c[target].to_numpy())
+        test_preds.extend(test_forecast)
+        test_actuals.extend(test_c[target].to_numpy())
+        val_preds.extend(val_forecast)
+        val_actuals.extend(val_c[target].to_numpy())
 
-        for split_name, actual, pred in [("Test", test_c[target].to_numpy(), test_forecast),
-                                          ("Val", val_c[target].to_numpy(), val_forecast)]:
-            rmse = float(np.sqrt(np.mean((actual - pred) ** 2))) if len(actual) else float("nan")
-            per_country_rows.append({"Code": code, "Split": split_name, "RMSE": round(rmse, 4), "converged": True})
+        for split_name, actual, pred in [
+            ("Test", test_c[target].to_numpy(), test_forecast),
+            ("Val", val_c[target].to_numpy(), val_forecast),
+        ]:
+            rmse = (
+                float(np.sqrt(np.mean((actual - pred) ** 2)))
+                if len(actual)
+                else float("nan")
+            )
+            per_country_rows.append(
+                {
+                    "Code": code,
+                    "Split": split_name,
+                    "RMSE": round(rmse, 4),
+                    "converged": True,
+                }
+            )
 
     eval_results = [
         _pooled_eval_dict("Prophet", "Test", test_actuals, test_preds),

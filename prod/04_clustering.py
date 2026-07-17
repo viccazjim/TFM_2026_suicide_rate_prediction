@@ -7,14 +7,6 @@ suicide rate trend), clusters with K-Means and hierarchical clustering,
 and checks how well the result agrees with the a priori EU_REGIONS
 grouping used descriptively in 02_eda.py.
 
-This is the DESCRIPTIVE clustering (target-inclusive, uses the full
-2000-2021 history) — a standalone validation exercise, not a feature
-for the supervised models. A leakage-safe version for use as a model
-feature exists in src/clustering.py (fit_country_clusters /
-assign_country_clusters) but is deliberately not wired into
-03_train.py — see that script's module docstring for why folding the
-cluster back into the panel models was tried and then reverted.
-
 Usage:
     python prod/04_clustering.py
 
@@ -27,7 +19,8 @@ import sys
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")  # headless: this script only saves figures to disk, never displays them
+
+matplotlib.use("Agg")
 
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
@@ -56,7 +49,9 @@ from src.diagnostics import (
     plot_suicide_trend_by_group,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 DEVELOPMENT_PATH = REPO_ROOT / "data" / "processed" / "df_development.parquet"
@@ -79,70 +74,123 @@ def run():
     """
     df_development = pd.read_parquet(DEVELOPMENT_PATH)
     predictor_features = build_predictor_list(df_development, ID_COLS, TARGET)
-    logger.info("df_development: %d rows | %d predictors", df_development.shape[0], len(predictor_features))
+    logger.info(
+        "df_development: %d rows | %d predictors",
+        df_development.shape[0],
+        len(predictor_features),
+    )
 
-    country_df = aggregate_country_features(df_development, predictor_features, target=TARGET)
+    country_df = aggregate_country_features(
+        df_development, predictor_features, target=TARGET
+    )
     feature_cols = [c for c in country_df.columns if c != "Code"]
     scaler = RobustScaler()
     X_scaled = pd.DataFrame(
-        scaler.fit_transform(country_df[feature_cols]), columns=feature_cols, index=country_df.index
+        scaler.fit_transform(country_df[feature_cols]),
+        columns=feature_cols,
+        index=country_df.index,
     )
     region_labels = country_df["Code"].map(EU_REGIONS)
-    logger.info("Aggregated to %d countries, %d features", country_df.shape[0], len(feature_cols))
+    logger.info(
+        "Aggregated to %d countries, %d features",
+        country_df.shape[0],
+        len(feature_cols),
+    )
 
     # --- How many clusters does the data support? ---
     sweep = sweep_kmeans(X_scaled, k_range=range(2, 9))
     logger.info("K-Means sweep (k, inertia, silhouette):\n%s", sweep.to_string())
     fig = plot_kmeans_elbow_silhouette(sweep)
-    save_figure(fig, name="kmeans_elbow_silhouette", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+    save_figure(
+        fig,
+        name="kmeans_elbow_silhouette",
+        prefix=FIG_PREFIX,
+        figures_dir=str(FIGURES_DIR),
+    )
 
     # --- K-Means and hierarchical at k=4 ---
     labels_kmeans, _ = run_kmeans(X_scaled, k=K)
     linkage_matrix, labels_hier = run_hierarchical(X_scaled, k=K)
 
     fig = plot_dendrogram(linkage_matrix, labels=country_df["Code"].tolist(), k=K)
-    save_figure(fig, name="dendrogram_k4", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+    save_figure(
+        fig, name="dendrogram_k4", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR)
+    )
 
-    fig = plot_cluster_vs_region_pca(X_scaled, labels_kmeans, region_labels, country_df["Code"].tolist())
-    save_figure(fig, name="cluster_vs_region_pca", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+    fig = plot_cluster_vs_region_pca(
+        X_scaled, labels_kmeans, region_labels, country_df["Code"].tolist()
+    )
+    save_figure(
+        fig,
+        name="cluster_vs_region_pca",
+        prefix=FIG_PREFIX,
+        figures_dir=str(FIGURES_DIR),
+    )
 
     # --- Agreement with EU_REGIONS ---
     agreement_kmeans = cluster_region_agreement(labels_kmeans, region_labels)
     agreement_hier = cluster_region_agreement(labels_hier, region_labels)
-    logger.info("K-Means vs EU_REGIONS      — ARI: %.3f | NMI: %.3f", agreement_kmeans["ARI"], agreement_kmeans["NMI"])
-    logger.info("Hierarchical vs EU_REGIONS — ARI: %.3f | NMI: %.3f", agreement_hier["ARI"], agreement_hier["NMI"])
+    logger.info(
+        "K-Means vs EU_REGIONS      — ARI: %.3f | NMI: %.3f",
+        agreement_kmeans["ARI"],
+        agreement_kmeans["NMI"],
+    )
+    logger.info(
+        "Hierarchical vs EU_REGIONS — ARI: %.3f | NMI: %.3f",
+        agreement_hier["ARI"],
+        agreement_hier["NMI"],
+    )
 
     # --- Temporal evolution: a priori regions vs algorithm clusters ---
-    # Maps the country-level cluster label back onto the full country-year
-    # panel so suicide rate can be traced over time by cluster, the same way
-    # it already is by EU_REGIONS in 02_eda.py — a direct visual counterpart
-    # to the ARI/NMI numbers above, not just a summary statistic.
     df_development["Region"] = df_development["Code"].map(EU_REGIONS)
     cluster_map = dict(zip(country_df["Code"], labels_kmeans))
-    df_development["Cluster"] = df_development["Code"].map(cluster_map).apply(lambda c: f"Cluster {c}")
+    df_development["Cluster"] = (
+        df_development["Code"].map(cluster_map).apply(lambda c: f"Cluster {c}")
+    )
 
     fig = plot_suicide_trend_by_group(
-        df_development, "Region", legend_title="EU region (a priori)",
+        df_development,
+        "Region",
+        legend_title="EU region (a priori)",
         title="Suicide rate evolution by a priori EU region (2000-2021)",
     )
-    save_figure(fig, name="suicide_trend_by_region_a_priori", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+    save_figure(
+        fig,
+        name="suicide_trend_by_region_a_priori",
+        prefix=FIG_PREFIX,
+        figures_dir=str(FIGURES_DIR),
+    )
 
     fig = plot_suicide_trend_by_group(
-        df_development, "Cluster", legend_title="K-Means cluster",
+        df_development,
+        "Cluster",
+        legend_title="K-Means cluster",
         title="Suicide rate evolution by data-driven cluster (2000-2021)",
     )
-    save_figure(fig, name="suicide_trend_by_cluster", prefix=FIG_PREFIX, figures_dir=str(FIGURES_DIR))
+    save_figure(
+        fig,
+        name="suicide_trend_by_cluster",
+        prefix=FIG_PREFIX,
+        figures_dir=str(FIGURES_DIR),
+    )
 
     # --- Save agreement table ---
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
-    agreement_table = pd.DataFrame([
-        {"Method": "K-Means", **agreement_kmeans},
-        {"Method": "Hierarchical", **agreement_hier},
-    ])
-    agreement_table.to_parquet(TABLES_DIR / "cluster_region_agreement.parquet", index=False)
+    agreement_table = pd.DataFrame(
+        [
+            {"Method": "K-Means", **agreement_kmeans},
+            {"Method": "Hierarchical", **agreement_hier},
+        ]
+    )
+    agreement_table.to_parquet(
+        TABLES_DIR / "cluster_region_agreement.parquet", index=False
+    )
     logger.info("Saved: %s", TABLES_DIR / "cluster_region_agreement.parquet")
 
-    return {"agreement_kmeans": agreement_kmeans, "agreement_hierarchical": agreement_hier}
+    return {
+        "agreement_kmeans": agreement_kmeans,
+        "agreement_hierarchical": agreement_hier,
+    }
 
 
 if __name__ == "__main__":

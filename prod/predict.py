@@ -3,10 +3,7 @@ Inference: scores new rows with the production model persisted by
 prod/03_train.py (CatBoost, Option B). This is the model that actually
 answers the thesis question — it scores any row from its socioeconomic
 and mental-health predictors alone, nothing derived from the target's
-own history — unlike the SARIMAX/Prophet persistence check in
-05_temporal_persistence_check.py, which forecasts a known country
-forward from its own trajectory and cannot score an arbitrary row at
-all (see that script's docstring for why the two aren't interchangeable).
+own history.
 
 Usage:
     # Score df_real_world.parquet (2022-2023, no WHO label yet) — default case
@@ -32,7 +29,9 @@ sys.path.append(str(REPO_ROOT))
 
 from src import ID_COLS, TARGET, build_predictor_list, load_artifact
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = REPO_ROOT / "outputs" / "models" / "catboost_option_b.joblib"
@@ -76,9 +75,7 @@ def predict(input_df: pd.DataFrame) -> pd.DataFrame:
     predictor_features = build_predictor_list(input_df, ID_COLS, TARGET)
     missing = [f for f in scaler.feature_names_in_ if f not in predictor_features]
     if missing:
-        raise ValueError(
-            f"Missing predictor columns required by the model: {missing}"
-        )
+        raise ValueError(f"Missing predictor columns required by the model: {missing}")
 
     X = input_df[list(scaler.feature_names_in_)].copy()
     X_scaled = pd.DataFrame(scaler.transform(X), columns=X.columns, index=X.index)
@@ -90,7 +87,11 @@ def predict(input_df: pd.DataFrame) -> pd.DataFrame:
 
 def run(input_path: Path, output_path: Path):
     logger.info("Loading input data: %s", input_path)
-    input_df = pd.read_parquet(input_path) if input_path.suffix == ".parquet" else pd.read_csv(input_path)
+    input_df = (
+        pd.read_parquet(input_path)
+        if input_path.suffix == ".parquet"
+        else pd.read_csv(input_path)
+    )
     logger.info("  %d rows, %d columns", input_df.shape[0], input_df.shape[1])
 
     output_df = predict(input_df)
@@ -105,10 +106,20 @@ def run(input_path: Path, output_path: Path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT_PATH,
-                         help=f"Input file, .parquet or .csv (default: {DEFAULT_INPUT_PATH})")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH,
-                         help=f"Output file, .parquet (default) or .csv by extension (default: {DEFAULT_OUTPUT_PATH})")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DEFAULT_INPUT_PATH,
+        help=f"Input file, .parquet or .csv (default: {DEFAULT_INPUT_PATH})",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT_PATH,
+        help=f"Output file, .parquet (default) or .csv by extension (default: {DEFAULT_OUTPUT_PATH})",
+    )
     args = parser.parse_args()
     run(args.input, args.output)

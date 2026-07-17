@@ -9,12 +9,6 @@ that way a failure in one stage doesn't leave the interpreter in a
 half-built state for the next one, and each stage's log stays separate
 with its own exit code.
 
-Stages 04 and 05 do not feed 03 or Pred — both are standalone
-analyses read alongside the main results, not inputs to them (see
-03_train.py's and 05_temporal_persistence_check.py's module docstrings
-for why they're kept separate on purpose). Their position in
-DEFAULT_ORDER is about narrative order, not a data dependency.
-
 Usage:
     python prod/run_pipeline.py            # every stage, in order
     python prod/run_pipeline.py --skip-01  # reuse existing data/processed/

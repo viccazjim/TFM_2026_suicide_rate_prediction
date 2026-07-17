@@ -21,9 +21,7 @@ from pathlib import Path
 
 import matplotlib
 
-matplotlib.use(
-    "Agg"
-)  # headless: this script only saves figures to disk, never displays them
+matplotlib.use("Agg")
 
 import pandas as pd
 
@@ -175,14 +173,8 @@ def run() -> pd.DataFrame:
     logger.info("Saved (updated): %s", DEVELOPMENT_PATH)
 
     # --- Apply the same structural changes to df_real_world for consistency ---
-    # (Region + drop Eating disorders), so predict.py scores a dataframe with
-    # exactly the same columns df_development has, not a slightly different one.
-    # "Suicide rate" is intentionally left as-is (all NaN) — it's the real
-    # target, just not yet published by WHO for 2022-2023, not an error to fix.
     if REAL_WORLD_PATH.exists():
-        logger.info(
-            "Applying the same cleaning to df_real_world: %s", REAL_WORLD_PATH
-        )
+        logger.info("Applying the same cleaning to df_real_world: %s", REAL_WORLD_PATH)
         df_real_world = pd.read_parquet(REAL_WORLD_PATH)
         df_real_world["Region"] = df_real_world["Code"].map(EU_REGIONS)
         df_real_world = df_real_world.drop(
