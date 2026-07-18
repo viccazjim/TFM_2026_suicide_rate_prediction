@@ -41,6 +41,7 @@ from src import (
     load_artifact,
     build_suicide_rate_panel_table,
     build_predictions_table,
+    build_trend_with_predictions_table,
     build_shap_importance_table,
     build_model_comparison_table,
     build_cluster_lookup_table,
@@ -107,6 +108,9 @@ def run():
     predictions_table = build_predictions_table(
         catboost_predictions, sarimax_predictions, cluster_lookup
     )
+    trend_with_predictions_table = build_trend_with_predictions_table(
+        df, predictions_table, target=TARGET
+    )
 
     # --- Model comparison, already saved by 03_train.py ---
     logger.info("Loading panel-model result tables")
@@ -138,6 +142,7 @@ def run():
     tables = {
         "Suicide_Rate_Panel": panel_table,
         "Predictions_2022_2023": predictions_table,
+        "Trend_With_Predictions": trend_with_predictions_table,
         "SHAP_Importance": shap_table,
         "Model_Comparison": model_comparison_table,
         "Cluster_PCA": cluster_lookup,

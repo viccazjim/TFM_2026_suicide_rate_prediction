@@ -88,6 +88,7 @@ from src.persistence import (
 from src.export import (
     build_suicide_rate_panel_table,
     build_predictions_table,
+    build_trend_with_predictions_table,
     build_shap_importance_table,
     build_model_comparison_table,
     build_cluster_lookup_table,

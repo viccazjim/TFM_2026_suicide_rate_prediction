@@ -97,6 +97,77 @@ def build_predictions_table(
     return combined
 
 
+def build_trend_with_predictions_table(
+    df_history: pd.DataFrame,
+    predictions_table: pd.DataFrame,
+    target: str,
+    id_col: str = "Code",
+) -> pd.DataFrame:
+    """
+    One long table combining the historical trend with every
+    prediction model's forecast, for a single Power BI line chart
+    (X=Year, Y=Rate, Legend=Series) that reproduces
+    plot_predictions_trend()'s "actual flowing into predicted" look —
+    Power BI has no equivalent of that function's connector-point
+    trick built in, so it's replicated here in the data itself: the
+    last historical year is duplicated as the first point of every
+    model's series, so each dashed forecast line starts exactly where
+    the solid "Actual" line ends, instead of floating with a gap.
+
+    Parameters
+    ----------
+    df_history : pd.DataFrame
+        Must contain `id_col`, "Country", "Year", `target` — typically
+        df_development.
+    predictions_table : pd.DataFrame
+        build_predictions_table()'s output — must contain `id_col`,
+        "Country", "Year", "Predicted_Rate", "Model".
+    target : str
+        Target column name in df_history (e.g. "Suicide rate").
+    id_col : str, default "Code"
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: [id_col, "Country", "Year", "Rate", "Series"]. One
+        "Actual" series per country, plus one series per country per
+        model in `predictions_table`, each starting with a duplicated
+        connector row.
+    """
+    actual = df_history[[id_col, "Country", "Year", target]].rename(
+        columns={target: "Rate"}
+    )
+    actual["Series"] = "Actual"
+
+    connector_frames = [actual]
+    for model_name, model_preds in predictions_table.groupby("Model"):
+        for code, country_preds in model_preds.groupby(id_col):
+            country_name = country_preds["Country"].iloc[0]
+            hist_country = actual[actual[id_col] == code].sort_values("Year")
+            if hist_country.empty:
+                continue
+            last_year = hist_country["Year"].iloc[-1]
+            last_rate = hist_country["Rate"].iloc[-1]
+
+            connector_row = pd.DataFrame(
+                {
+                    id_col: [code],
+                    "Country": [country_name],
+                    "Year": [last_year],
+                    "Rate": [last_rate],
+                    "Series": [model_name],
+                }
+            )
+            forecast_rows = country_preds.sort_values("Year")[
+                [id_col, "Country", "Year", "Predicted_Rate"]
+            ].rename(columns={"Predicted_Rate": "Rate"})
+            forecast_rows["Series"] = model_name
+
+            connector_frames.append(pd.concat([connector_row, forecast_rows], ignore_index=True))
+
+    return pd.concat(connector_frames, ignore_index=True)
+
+
 def build_shap_importance_table(shap_values, feature_names: list[str]) -> pd.DataFrame:
     """
     Mean |SHAP value| per feature, ranked descending — for the
