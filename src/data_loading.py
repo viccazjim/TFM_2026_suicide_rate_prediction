@@ -306,8 +306,12 @@ def build_master_dataset(
     )
     df_complete = df_complete.sort_values(by=["Country", "Year"]).reset_index(drop=True)
 
-    df_development = df_complete.loc[df_complete["Year"] <= development_cutoff_year].copy()
-    df_real_world = df_complete.loc[df_complete["Year"] > development_cutoff_year].copy()
+    df_development = df_complete.loc[
+        df_complete["Year"] <= development_cutoff_year
+    ].copy()
+    df_real_world = df_complete.loc[
+        df_complete["Year"] > development_cutoff_year
+    ].copy()
     return df_development, df_real_world
 
 
