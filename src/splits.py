@@ -46,9 +46,9 @@ def geographical_split(
     test_countries = countries[train_split:test_split]
     val_countries = countries[test_split:]
 
-    df_train = df[df["Code"].isin(train_countries)].copy()
-    df_test = df[df["Code"].isin(test_countries)].copy()
-    df_val = df[df["Code"].isin(val_countries)].copy()
+    df_train = df.loc[df["Code"].isin(train_countries)].copy()
+    df_test = df.loc[df["Code"].isin(test_countries)].copy()
+    df_val = df.loc[df["Code"].isin(val_countries)].copy()
     return df_train, df_test, df_val, train_countries, test_countries, val_countries
 
 
@@ -87,7 +87,7 @@ def temporal_split(
     test_years = year_range[train_split:test_split]
     val_years = year_range[test_split:]
 
-    df_train = df[df["Year"].isin(train_years)].copy()
-    df_test = df[df["Year"].isin(test_years)].copy()
-    df_val = df[df["Year"].isin(val_years)].copy()
+    df_train = df.loc[df["Year"].isin(train_years)].copy()
+    df_test = df.loc[df["Year"].isin(test_years)].copy()
+    df_val = df.loc[df["Year"].isin(val_years)].copy()
     return df_train, df_test, df_val, train_years, test_years, val_years

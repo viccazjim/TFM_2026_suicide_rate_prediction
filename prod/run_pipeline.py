@@ -44,6 +44,24 @@ DEFAULT_ORDER = ["01", "02", "03", "04", "05", "Pred", "06", "07"]
 
 
 def run_stage(stage_key: str):
+    """
+    Runs one pipeline stage as a fresh subprocess (`python <script>`,
+    inheriting stdout/stderr so its own logging shows inline) and exits
+    the whole orchestrator immediately if that stage fails — nothing
+    downstream is attempted on top of a stage that didn't succeed.
+
+    Parameters
+    ----------
+    stage_key : str
+        A key into STAGES, e.g. "01", "Pred", "07".
+
+    Raises
+    ------
+    SystemExit
+        If the stage's subprocess returns a non-zero exit code — this
+        function calls sys.exit() with that same code rather than
+        raising, so run_pipeline.py's own exit code reflects it too.
+    """
     script_path = STAGES[stage_key]
     logger.info("=" * 60)
     logger.info("Stage %s — %s", stage_key, script_path.name)
@@ -60,6 +78,17 @@ def run_stage(stage_key: str):
 
 
 def run(stage_keys):
+    """
+    Runs every stage in `stage_keys`, in order, via `run_stage()` —
+    the orchestrator's own entry point, called either with the full
+    DEFAULT_ORDER or a single stage from `--only`.
+
+    Parameters
+    ----------
+    stage_keys : list[str]
+        Stage keys to run in sequence, e.g. DEFAULT_ORDER or a
+        single-element list for `--only`.
+    """
     for key in stage_keys:
         run_stage(key)
     logger.info("Pipeline complete. Production model available in outputs/models/.")

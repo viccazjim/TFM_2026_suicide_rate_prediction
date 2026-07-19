@@ -64,6 +64,18 @@ N_CLUSTERS = 4  # mirrors EU_REGIONS' 4 groups — see 04_clustering.py
 
 
 def run():
+    """
+    Builds every table the Power BI dashboard needs and writes them to
+    a single formatted workbook (OUTPUT_PATH). Two tables are computed
+    here — the descriptive K-Means/PCA cluster lookup (re-run rather
+    than loaded, since 04_clustering.py doesn't persist its labels)
+    and SHAP importance for the production CatBoost model — everything
+    else is assembled from tables/artifacts earlier stages already
+    saved (predict.py's and 06_visualize_predictions.py's predictions,
+    03_train.py's result tables, 05_temporal_persistence_check.py's
+    comparison table). Nothing is returned; the workbook is the only
+    output, and its path/sheet count are logged once written.
+    """
     POWERBI_DIR.mkdir(parents=True, exist_ok=True)
 
     logger.info("Loading historical data and predictor list")

@@ -14,6 +14,7 @@ itself doesn't.
 
 import numpy as np
 import pandas as pd
+from typing import cast
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -86,9 +87,13 @@ def build_predictions_table(
     pd.DataFrame
         Columns: [id_col, "Country", "Year", "Predicted_Rate", "Model", "Region"].
     """
-    cat = catboost_predictions[[id_col, "Country", "Year", "Predicted suicide rate"]].copy()
+    cat = cast(
+        pd.DataFrame, catboost_predictions[[id_col, "Country", "Year", "Predicted suicide rate"]]
+    ).copy()
     cat["Model"] = "CatBoost"
-    sar = sarimax_predictions[[id_col, "Country", "Year", "Predicted suicide rate"]].copy()
+    sar = cast(
+        pd.DataFrame, sarimax_predictions[[id_col, "Country", "Year", "Predicted suicide rate"]]
+    ).copy()
     sar["Model"] = "SARIMAX +1 exog"
 
     combined = pd.concat([cat, sar], ignore_index=True)
@@ -134,16 +139,16 @@ def build_trend_with_predictions_table(
         model in `predictions_table`, each starting with a duplicated
         connector row.
     """
-    actual = df_history[[id_col, "Country", "Year", target]].rename(
-        columns={target: "Rate"}
-    )
+    actual = cast(
+        pd.DataFrame, df_history[[id_col, "Country", "Year", target]]
+    ).rename(columns={target: "Rate"})
     actual["Series"] = "Actual"
 
     connector_frames = [actual]
     for model_name, model_preds in predictions_table.groupby("Model"):
         for code, country_preds in model_preds.groupby(id_col):
             country_name = country_preds["Country"].iloc[0]
-            hist_country = actual[actual[id_col] == code].sort_values("Year")
+            hist_country = actual.loc[actual[id_col] == code].sort_values("Year")
             if hist_country.empty:
                 continue
             last_year = hist_country["Year"].iloc[-1]
@@ -158,9 +163,10 @@ def build_trend_with_predictions_table(
                     "Series": [model_name],
                 }
             )
-            forecast_rows = country_preds.sort_values("Year")[
-                [id_col, "Country", "Year", "Predicted_Rate"]
-            ].rename(columns={"Predicted_Rate": "Rate"})
+            forecast_rows = cast(
+                pd.DataFrame,
+                country_preds.sort_values("Year")[[id_col, "Country", "Year", "Predicted_Rate"]],
+            ).rename(columns={"Predicted_Rate": "Rate"})
             forecast_rows["Series"] = model_name
 
             connector_frames.append(pd.concat([connector_row, forecast_rows], ignore_index=True))
@@ -217,7 +223,10 @@ def build_model_comparison_table(result_tables: dict) -> pd.DataFrame:
         t["Split"] = split
         frames.append(t)
     combined = pd.concat(frames, ignore_index=True)
-    return combined[["Model", "Option", "Split", "CV RMSE", "RMSE", "MAE", "R²", "Time (s)"]]
+    return cast(
+        pd.DataFrame,
+        combined[["Model", "Option", "Split", "CV RMSE", "RMSE", "MAE", "R²", "Time (s)"]],
+    )
 
 
 def build_cluster_lookup_table(
@@ -256,7 +265,12 @@ def build_cluster_lookup_table(
             "PCA_Component_2": pca_coords[:, 1],
         }
     )
-    table["Region"] = table["Code"].map(region_map)
+    # .map(region_map) is standard, documented pandas usage (Series.map
+    # accepts a dict for value substitution) — the installed stub's
+    # overloads for .map() only cover a callable, not a Mapping, so this
+    # is a stub gap, not a real type error (same as 06_visualize_predictions.py's
+    # EU_REGIONS mapping).
+    table["Region"] = table["Code"].map(region_map)  # type: ignore[arg-type]
     return table
 
 
@@ -282,6 +296,11 @@ def write_powerbi_workbook(tables: dict, path: str) -> str:
         `path`, unchanged — returned for convenient chaining/logging.
     """
     wb = Workbook()
+    # A freshly-created Workbook() always has exactly one default sheet,
+    # so .active is never actually None here — the assert gives pyright
+    # the same guarantee it can't infer from the (correctly) Optional
+    # stub type on its own, with a real runtime check behind it.
+    assert wb.active is not None
     wb.remove(wb.active)
 
     header_font = Font(name="Arial", bold=True, color="FFFFFF", size=10)

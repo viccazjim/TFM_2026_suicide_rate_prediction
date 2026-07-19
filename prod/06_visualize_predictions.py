@@ -154,6 +154,25 @@ def _forecast_temporal_model(
 
 
 def run(predictions_path: Path):
+    """
+    Fits SARIMAX + the curated exogenous feature per country to forecast
+    2022-2023 (the temporal model's answer alongside CatBoost's, loaded
+    from `predictions_path`), saves that forecast table, and generates
+    every prediction-comparison figure: single-model trend/by-country
+    plots for CatBoost alone, CatBoost-vs-SARIMAX comparison plots
+    (trend per spotlight country, bar chart per year), and the same
+    comparison aggregated to EU-region level (trend per region, bar
+    chart per year). Nothing is returned — every result is written to
+    outputs/tables/ or outputs/figures/ as it's produced.
+
+    Parameters
+    ----------
+    predictions_path : Path
+        CatBoost predictions file to visualise — predict.py's output
+        (outputs/tables/predictions.parquet by default, via
+        DEFAULT_PREDICTIONS_PATH), or any file with the same columns
+        passed via --predictions.
+    """
     if not predictions_path.exists():
         raise FileNotFoundError(
             f"No predictions file found at {predictions_path}. Run first: python prod/predict.py"

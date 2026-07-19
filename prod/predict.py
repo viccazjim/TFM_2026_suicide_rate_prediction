@@ -86,6 +86,27 @@ def predict(input_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run(input_path: Path, output_path: Path):
+    """
+    Reads `input_path`, scores it with `predict()`, and writes the
+    result to `output_path`.
+
+    Parameters
+    ----------
+    input_path : Path
+        .parquet or .csv file with the same predictor columns as
+        `data/processed/df_development.parquet` (target and ID columns
+        optional — see `predict()`).
+    output_path : Path
+        Where to write the scored output — .csv by extension,
+        .parquet otherwise. Parent directories are created if needed.
+
+    Returns
+    -------
+    pd.DataFrame
+        The same DataFrame written to `output_path`, for convenient
+        reuse if `run()` is called from another script rather than the
+        command line.
+    """
     logger.info("Loading input data: %s", input_path)
     input_df = (
         pd.read_parquet(input_path)

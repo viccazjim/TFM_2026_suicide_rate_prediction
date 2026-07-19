@@ -9,6 +9,7 @@ import pandas as pd
 import pycountry
 import requests
 import urllib3
+from typing import cast
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -104,7 +105,7 @@ def load_ihme_data(csv_path: str, min_year: int = 2000) -> pd.DataFrame:
         columns={"location_name": "Country", "year": "Year"}
     )
     df_base = df_base.drop(columns=["All causes"])
-    df_base = df_base[df_base["Year"] >= min_year].copy()
+    df_base = df_base.loc[df_base["Year"] >= min_year].copy()
     return df_base
 
 
@@ -187,12 +188,14 @@ def fetch_worldbank_indicators(
         df_wb["Year"] = df_wb["date"].astype(int)
         df_wb[column_name] = df_wb["value"]
 
-        df_final_wb = df_wb[["Country", "Code", "Year", column_name]].dropna()
-        df_final_eu = df_final_wb[df_final_wb["Code"].isin(eu_countries_iso)].copy()
+        df_final_wb = cast(
+            pd.DataFrame, df_wb[["Country", "Code", "Year", column_name]]
+        ).dropna()
+        df_final_eu = df_final_wb.loc[df_final_wb["Code"].isin(eu_countries_iso)].copy()
 
         df_features = pd.merge(
             df_features,
-            df_final_eu[["Code", "Year", column_name]],
+            cast(pd.DataFrame, df_final_eu[["Code", "Year", column_name]]),
             on=["Code", "Year"],
             how="left",
         )
@@ -252,11 +255,13 @@ def fetch_who_suicide_rates(indicator: str = "SDGSUICIDE") -> pd.DataFrame:
         raise RuntimeError("WHO API responded but returned no data for this indicator.")
 
     df_raw = pd.DataFrame(data)
-    df_filtered = df_raw[
+    df_filtered = df_raw.loc[
         (df_raw["Dim1"] == "SEX_BTSX") & (df_raw["Dim2"] == "AGEGROUP_YEARSALL")
     ].copy()
 
-    df_clean = df_filtered[["SpatialDim", "TimeDim", "NumericValue"]].copy()
+    df_clean = cast(
+        pd.DataFrame, df_filtered[["SpatialDim", "TimeDim", "NumericValue"]]
+    ).copy()
     df_clean.columns = ["Code", "Year", "Suicide rate"]
     df_clean = df_clean.sort_values(by=["Code", "Year"])
     return df_clean
@@ -301,8 +306,8 @@ def build_master_dataset(
     )
     df_complete = df_complete.sort_values(by=["Country", "Year"]).reset_index(drop=True)
 
-    df_development = df_complete[df_complete["Year"] <= development_cutoff_year].copy()
-    df_real_world = df_complete[df_complete["Year"] > development_cutoff_year].copy()
+    df_development = df_complete.loc[df_complete["Year"] <= development_cutoff_year].copy()
+    df_real_world = df_complete.loc[df_complete["Year"] > development_cutoff_year].copy()
     return df_development, df_real_world
 
 

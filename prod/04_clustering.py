@@ -90,7 +90,7 @@ def run():
         columns=feature_cols,
         index=country_df.index,
     )
-    region_labels = country_df["Code"].map(EU_REGIONS)
+    region_labels = country_df["Code"].map(EU_REGIONS)  # type: ignore[arg-type]
     logger.info(
         "Aggregated to %d countries, %d features",
         country_df.shape[0],
@@ -142,10 +142,10 @@ def run():
     )
 
     # --- Temporal evolution: a priori regions vs algorithm clusters ---
-    df_development["Region"] = df_development["Code"].map(EU_REGIONS)
+    df_development["Region"] = df_development["Code"].map(EU_REGIONS)  # type: ignore[arg-type]
     cluster_map = dict(zip(country_df["Code"], labels_kmeans))
     df_development["Cluster"] = (
-        df_development["Code"].map(cluster_map).apply(lambda c: f"Cluster {c}")
+        df_development["Code"].map(cluster_map).apply(lambda c: f"Cluster {c}")  # type: ignore[arg-type]
     )
 
     fig = plot_suicide_trend_by_group(

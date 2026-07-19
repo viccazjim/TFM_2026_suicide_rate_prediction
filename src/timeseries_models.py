@@ -66,7 +66,7 @@ def train_evaluate_sarimax(
     exog_features: list[str] | None = None,
     id_col: str = "Code",
     year_col: str = "Year",
-    order: tuple = (1, 1, 0),
+    order: tuple = (1, 1, 1),
 ):
     """
     Fits one SARIMAX per country on df_train's years only, forecasts
@@ -92,7 +92,7 @@ def train_evaluate_sarimax(
         long list here is a real overfitting risk at this sample size.
     id_col : str, default "Code"
     year_col : str, default "Year"
-    order : tuple, default (1, 1, 0)
+    order : tuple, default (1, 1, 1)
         Non-seasonal (p, d, q) — no seasonal term, since annual data
         has no sub-annual seasonality to capture, and kept low-order
         given how few points each country provides.
@@ -193,7 +193,7 @@ def fit_sarimax_models(
     exog_features: list[str] | None = None,
     id_col: str = "Code",
     year_col: str = "Year",
-    order: tuple = (1, 1, 0),
+    order: tuple = (1, 1, 1),
 ) -> dict:
     """
     Fits one SARIMAX per country and returns the fitted results objects,
@@ -212,7 +212,7 @@ def fit_sarimax_models(
         None (univariate).
     id_col : str, default "Code"
     year_col : str, default "Year"
-    order : tuple, default (1, 1, 0)
+    order : tuple, default (1, 1, 1)
 
     Returns
     -------

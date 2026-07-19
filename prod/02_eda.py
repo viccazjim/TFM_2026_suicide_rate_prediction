@@ -18,6 +18,7 @@ run first — reads data/processed/df_development.parquet.
 import logging
 import sys
 from pathlib import Path
+from typing import cast
 
 import matplotlib
 
@@ -99,7 +100,7 @@ def run() -> pd.DataFrame:
 
     # --- Trend by region ---
     logger.info("Generating region-level trend plot")
-    df_development["Region"] = df_development["Code"].map(EU_REGIONS)
+    df_development["Region"] = df_development["Code"].map(EU_REGIONS)  # type: ignore[arg-type]
     fig = plot_suicide_trend_by_region(df_development)
     save_figure(
         fig,
@@ -129,7 +130,7 @@ def run() -> pd.DataFrame:
         figures_dir=str(FIGURES_DIR),
     )
     skew_summary = (
-        df_development[predictor_features].skew().sort_values(ascending=False).round(2)
+        cast(pd.DataFrame, df_development[predictor_features]).skew().sort_values(ascending=False).round(2)
     )
     logger.info("Skewness summary:\n%s", skew_summary)
 
@@ -176,7 +177,7 @@ def run() -> pd.DataFrame:
     if REAL_WORLD_PATH.exists():
         logger.info("Applying the same cleaning to df_real_world: %s", REAL_WORLD_PATH)
         df_real_world = pd.read_parquet(REAL_WORLD_PATH)
-        df_real_world["Region"] = df_real_world["Code"].map(EU_REGIONS)
+        df_real_world["Region"] = df_real_world["Code"].map(EU_REGIONS)  # type: ignore[arg-type]
         df_real_world = df_real_world.drop(
             columns=["Eating disorders"], errors="ignore"
         )
