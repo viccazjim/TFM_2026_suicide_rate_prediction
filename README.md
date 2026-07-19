@@ -11,7 +11,7 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 │   └── processed/               # df_development.parquet, df_real_world.parquet
 ├── docs/
 │   ├── orientaciones_y_pautas.pdf   # Program guidelines for the TFM
-│   └── predictive_analysis_of_suicide_rates_2026_CV_CM_CL.docx   # Thesis write-up (current draft)
+│   └── predictive_analysis_of_suicide_rates_2026.docx   # Thesis write-up (current draft)
 ├── notebooks/                   # Exploratory track — mirrors prod/ 1:1
 │   ├── 01_data_loading_cleaning.ipynb
 │   ├── 02_eda.ipynb
@@ -26,7 +26,11 @@ Master's thesis (TFM, MSc Data Science and Artificial Intelligence) project: pre
 │   ├── figures/                 # All saved plots, prefixed by pipeline stage (02_/03_/04_/06_)
 │   ├── models/                  # Persisted production model, scaler, and SARIMAX+exog models (joblib)
 │   ├── tables/                  # Result tables and predictions (Parquet)
-│   └── powerbi/                 # TFM_PowerBI_data.xlsx — the dashboard's data workbook
+│   └── powerbi/                 # PowerBI_data.xlsx — the dashboard's data workbook
+├── vis/                          # The Power BI report itself
+│   ├── predictive_analysis_of_suicide_rates_2026.pbix   # Power BI project — connects to outputs/powerbi/PowerBI_data.xlsx
+│   ├── europe.topojson           # Custom shape file for the Shape Map visual (EU country boundaries)
+│   └── predictive_analysis_of_suicide_rates_2026.pdf     # Static export of the dashboard, for reference
 ├── prod/                        # Production track — modular scripts, no notebooks
 │   ├── 01_data_pipeline.py      # Ingestion + cleaning
 │   ├── 02_eda.py                # EDA (figures + VIF), cleans df_development and df_real_world
@@ -95,7 +99,7 @@ python prod/run_pipeline.py --only 03       # training only
 python prod/predict.py                      # score df_real_world.parquet with CatBoost
 python prod/predict.py --input custom.parquet --output custom_predictions.csv
 
-python prod/07_export_powerbi.py            # rebuild outputs/powerbi/TFM_PowerBI_data.xlsx alone
+python prod/07_export_powerbi.py            # rebuild outputs/powerbi/PowerBI_data.xlsx alone
 
 python prod/clean_outputs.py                # wipe data/processed/, outputs/, catboost_info/ before a clean re-run
 python prod/clean_outputs.py --dry-run      # preview what would be deleted, without deleting
@@ -128,12 +132,12 @@ SHAP on the production CatBoost model shows `Alcohol use disorders` as by far th
 | Model | Variant | Test R² | Val R² |
 |---|---|---|---|
 | Naive persistence | no model | — | 0.62 |
-| SARIMAX | univariate | 0.91 | 0.60 |
+| SARIMAX | univariate | 0.90 | 0.54 |
 | SARIMAX | +1 exog (`Alcohol use disorders`) | **0.94** | **0.77** |
 | Prophet | univariate | 0.90 | 0.72 |
 | Prophet | +1 exog (`Alcohol use disorders`) | 0.91 | 0.69 |
 
-Suicide rate's pooled year-over-year autocorrelation is ≈0.99 — a model with access to a country's own recent value looks strong almost for free, which is exactly why the naive baseline is reported alongside the "real" models rather than left out. Univariate SARIMAX does not even beat the naive baseline; SARIMAX + the single curated exogenous feature is the only result that constitutes real evidence that a determinant adds explanatory power on top of pure persistence, and it is not used as the production model regardless (see below).
+Suicide rate's pooled year-over-year autocorrelation is ≈0.99 — a model with access to a country's own recent value looks strong almost for free, which is exactly why the naive baseline is reported alongside the "real" models rather than left out. Univariate SARIMAX does not even beat the naive baseline (0.54 vs 0.62) — worse, in fact, than its own headline Test R² (0.90) would suggest; SARIMAX + the single curated exogenous feature is the only result that constitutes real evidence that a determinant adds explanatory power on top of pure persistence, and it is not used as the production model regardless (see below).
 
 ### 3. Clustering (descriptive, not a model feature)
 
@@ -149,4 +153,6 @@ An earlier version of the pipeline fed the country cluster from `04_clustering.p
 
 ## Power BI dashboard
 
-`prod/07_export_powerbi.py` (and its notebook counterpart) assembles `outputs/powerbi/TFM_PowerBI_data.xlsx` — eight flat, denormalised tables (country panel, predictions, a combined actual+predicted trend table, SHAP importance, model comparison, cluster/PCA lookup, temporal persistence check, cluster/region agreement) meant to be connected directly via Power BI's "Get Data > Excel", one visual per table with no further transformation needed. `Trend_With_Predictions` specifically exists so a single Power BI line chart (X=Year, Y=Rate, Legend=Series) reproduces `plot_predictions_trend()`'s "actual flowing into predicted" look — the last historical year is duplicated as the first point of every model's forecast series, the same connector-point trick that function uses, since Power BI has no built-in equivalent. `src/export.py` builds every table purely from artifacts the rest of the pipeline already produces — no new model is fit and no new result is computed there; see that module's docstring. `Code` is the join key between `Suicide_Rate_Panel`, `Predictions_2022_2023`, `Trend_With_Predictions`, and `Cluster_PCA`.
+`prod/07_export_powerbi.py` (and its notebook counterpart) assembles `outputs/powerbi/PowerBI_data.xlsx` — eight flat, denormalised tables (country panel, predictions, a combined actual+predicted trend table, SHAP importance, model comparison, cluster/PCA lookup, temporal persistence check, cluster/region agreement) meant to be connected directly via Power BI's "Get Data > Excel", one visual per table with no further transformation needed. `Trend_With_Predictions` specifically exists so a single Power BI line chart (X=Year, Y=Rate, Legend=Series) reproduces `plot_predictions_trend()`'s "actual flowing into predicted" look — the last historical year is duplicated as the first point of every model's forecast series, the same connector-point trick that function uses, since Power BI has no built-in equivalent. `src/export.py` builds every table purely from artifacts the rest of the pipeline already produces — no new model is fit and no new result is computed there; see that module's docstring. `Code` is the join key between `Suicide_Rate_Panel`, `Predictions_2022_2023`, `Trend_With_Predictions`, and `Cluster_PCA`.
+
+The report itself lives in `vis/predictive_analysis_of_suicide_rates_2026.pbix`, built against `outputs/powerbi/PowerBI_data.xlsx` — re-running `07_export_powerbi.py` and refreshing the `.pbix`'s data source is enough to update every page. `vis/europe.topojson` is the custom shape file the country map visual uses (EU boundaries, needed since Power BI's default map shapes don't cover this granularity); `vis/predictive_analysis_of_suicide_rates_2026.pdf` is a static export, kept for reference without needing Power BI Desktop installed to view it.
