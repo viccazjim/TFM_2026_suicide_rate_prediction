@@ -343,6 +343,13 @@ def interpolate_with_trend_extrapolation(
     for col in columns:
 
         def _fill_group(group):
+            """
+            Interpolates one country's series for `col` (closed over
+            from the enclosing loop): interior gaps via linear
+            interpolation, boundary gaps via linear extrapolation from
+            an OLS trend fit on the country's known points, falling
+            back to flat-fill if fewer than 2 points are known.
+            """
             s = group[col]
             s_interp = s.interpolate(
                 method="linear", limit_direction=None
@@ -355,7 +362,7 @@ def interpolate_with_trend_extrapolation(
                     method="linear", limit_direction="both"
                 )  # fallback: flat-fill
             coeffs = np.polyfit(
-                known.index_year if False else group.loc[known.index, "Year"],
+                group.loc[known.index, "Year"],
                 known.values,
                 deg=1,
             )
